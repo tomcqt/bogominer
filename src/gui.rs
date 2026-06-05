@@ -271,6 +271,8 @@ fn setup_fonts(ctx: &egui::Context) {
         .or_default()
         .insert(0, "JetBrainsMono".to_owned());
 
+    ctx.set_fonts(fonts);
+
     let mut style = (*ctx.style()).clone();
 
     use egui::FontId;
