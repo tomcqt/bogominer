@@ -246,6 +246,64 @@ impl eframe::App for App {
     }
 }
 
+fn setup_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+
+    let inter = egui::FontData::from_static(include_bytes!("../assets/fonts/Inter.ttf"));
+
+    let jetbrainsmono =
+        egui::FontData::from_static(include_bytes!("../assets/fonts/JetBrainsMono.ttf"));
+
+    fonts
+        .font_data
+        .insert("Inter".to_owned(), std::sync::Arc::new(inter));
+    fonts.font_data.insert(
+        "JetBrainsMono".to_owned(),
+        std::sync::Arc::new(jetbrainsmono),
+    );
+
+    fonts
+        .families
+        .entry(egui::FontFamily::Proportional)
+        .or_default()
+        .insert(0, "Inter".to_owned());
+
+    fonts
+        .families
+        .entry(egui::FontFamily::Monospace)
+        .or_default()
+        .insert(0, "JetBrainsMono".to_owned());
+
+    let mut style = (*ctx.style()).clone();
+
+    use egui::FontId;
+    style.text_styles = [
+        (
+            egui::TextStyle::Heading,
+            FontId::new(20.0, egui::FontFamily::Proportional),
+        ),
+        (
+            egui::TextStyle::Body,
+            FontId::new(14.0, egui::FontFamily::Proportional),
+        ),
+        (
+            egui::TextStyle::Monospace,
+            FontId::new(14.0, egui::FontFamily::Monospace),
+        ),
+        (
+            egui::TextStyle::Button,
+            FontId::new(14.0, egui::FontFamily::Proportional),
+        ),
+        (
+            egui::TextStyle::Small,
+            FontId::new(11.0, egui::FontFamily::Proportional),
+        ),
+    ]
+    .into();
+
+    ctx.set_style(style);
+}
+
 impl App {
     fn draw_login(&mut self, ui: &mut egui::Ui, margin: f32) {
         ui.add_space(32.0);
@@ -750,7 +808,11 @@ pub fn run(cpu_target: f64, code: Option<String>, autostart: bool) {
     eframe::run_native(
         "bogominer",
         options,
-        Box::new(move |_cc| Ok(Box::new(App::new(cpu_target, code, autostart)))),
+        Box::new(move |cc| {
+            let app = App::new(cpu_target, code, autostart);
+            setup_fonts(&cc.egui_ctx);
+            Ok(Box::new(app))
+        }),
     )
     .expect("failed to run egui");
 }
