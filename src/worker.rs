@@ -27,7 +27,8 @@ pub fn spawn_worker(
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
     tokio::spawn(async move {
-        let result = run_worker(uuid, nickname, code, stats.clone(), throttle, cmd_rx).await;
+        let result: Result<(), String> =
+            run_worker(uuid, nickname, code, stats.clone(), throttle, cmd_rx).await;
         stats.active_workers.fetch_sub(1, Ordering::Relaxed);
         if let Err(e) = result {
             let _ = on_error.send(e);
@@ -45,9 +46,8 @@ async fn run_worker(
     stats: Arc<Stats>,
     initial_throttle: f64,
     mut cmd_rx: mpsc::UnboundedReceiver<WorkerCmd>,
-) /*-> Result<(), String>*/
-{
-    let (ws_stream, _) = connect_async(WS_URL)
+) -> Result<(), String> {
+    let (ws_stream, _response) = connect_async(WS_URL)
         .await
         .map_err(|e| format!("ws connect failed: {}", e))?;
 
