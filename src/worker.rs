@@ -26,10 +26,11 @@ pub fn spawn_worker(
 ) -> mpsc::UnboundedSender<WorkerCmd> {
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
+    let stats_inner = stats.clone();
     tokio::spawn(async move {
         let result: Result<(), String> =
-            run_worker(uuid, nickname, code, stats.clone(), throttle, cmd_rx).await;
-        stats.active_workers.fetch_sub(1, Ordering::Relaxed);
+            run_worker(uuid, nickname, code, stats_inner.clone(), throttle, cmd_rx).await;
+        stats_inner.active_workers.fetch_sub(1, Ordering::Relaxed);
         if let Err(e) = result {
             let _ = on_error.send(e);
         }
