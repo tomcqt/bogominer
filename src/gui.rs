@@ -254,13 +254,10 @@ fn setup_fonts(ctx: &egui::Context) {
     let jetbrainsmono =
         egui::FontData::from_static(include_bytes!("../assets/fonts/JetBrainsMono.ttf"));
 
+    fonts.font_data.insert("Inter".to_owned(), inter);
     fonts
         .font_data
-        .insert("Inter".to_owned(), std::sync::Arc::new(inter));
-    fonts.font_data.insert(
-        "JetBrainsMono".to_owned(),
-        std::sync::Arc::new(jetbrainsmono),
-    );
+        .insert("JetBrainsMono".to_owned(), jetbrainsmono);
 
     fonts
         .families
