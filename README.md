@@ -1,7 +1,5 @@
 # bogominer.
 
-an open-source native bogosort miner for swapjs' bogostream.
+bogominer is the official desktop bogosorting client for [swapjs' bogostream](https://bogo.swapjs.dev).
 
-## WARNING
-
-bogominer currently DOES NOT WORK!!! do not use it!!! it will ban your account!!! there will be a ping in #dev-updates when its fixed!
+we gladly accept contributions! if you have anything you want to change, please create a pr on the [gitlab repo](https://gitlab.com/ttomcat/bogominer).
