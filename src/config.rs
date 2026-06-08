@@ -6,10 +6,10 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     #[serde(default)]
-    pub code: Option<String>,
+    pub uuid: Option<String>,
 
     #[serde(default)]
-    pub uuid: Option<String>,
+    pub recovery_code: Option<String>,
 
     #[serde(default)]
     pub nickname: Option<String>,
@@ -41,13 +41,13 @@ impl Config {
     }
 
     pub fn clear(&mut self) {
-        self.code = None;
         self.uuid = None;
+        self.recovery_code = None;
         self.nickname = None;
         self.save();
     }
 
     pub fn has_credentials(&self) -> bool {
-        self.code.is_some()
+        self.uuid.is_some() && self.nickname.is_some()
     }
 }

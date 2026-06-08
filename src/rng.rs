@@ -18,6 +18,11 @@ impl SplitMix64 {
     }
 }
 
+#[inline(always)]
+pub fn shuffle_seed(seed64: u64, index: u64) -> u64 {
+    seed64.wrapping_add(index.wrapping_mul(0x9e3779b97f4a7c15))
+}
+
 pub struct Xoshiro128PlusPlus {
     s: [u32; 4],
 }
@@ -67,13 +72,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_splitmix64_matches_js() {
-        let mut sm = SplitMix64::new(12345);
-        let a = sm.next();
-        let b = sm.next();
-        // TODO: add proper exact values from js impl
-        assert_ne!(a, 0);
-        assert_ne!(b, 0);
+    fn test_shuffle_seed_deterministic() {
+        let a = shuffle_seed(12345, 0);
+        let b = shuffle_seed(12345, 0);
+        assert_eq!(a, b);
+        assert_eq!(a, 12345);
+    }
+
+    #[test]
+    fn test_shuffle_seed_different_indices() {
+        let a = shuffle_seed(12345, 0);
+        let b = shuffle_seed(12345, 1);
+        assert_ne!(a, b);
     }
 
     #[test]

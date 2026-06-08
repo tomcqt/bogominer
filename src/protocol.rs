@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct HelloMsg {
     #[serde(rename = "type")]
     pub msg_type: &'static str,
+    pub v: u32,
     pub uuid: String,
     pub nickname: String,
     pub code: String,
@@ -15,6 +16,7 @@ impl HelloMsg {
     pub fn new(uuid: &str, nickname: &str, code: &str) -> Self {
         Self {
             msg_type: "hello",
+            v: 5,
             uuid: uuid.to_string(),
             nickname: nickname.to_string(),
             code: code.to_string(),
@@ -30,7 +32,7 @@ pub struct ResultMsg {
     pub total_done: u64,
     pub best_correct: i32,
     pub best_arr: Vec<u8>,
-    pub elapsed: f64,
+    pub best_index: u64,
 }
 
 impl ResultMsg {
@@ -39,7 +41,7 @@ impl ResultMsg {
         total_done: u64,
         best_correct: i32,
         best_arr: Vec<u8>,
-        elapsed: f64,
+        best_index: u64,
     ) -> Self {
         Self {
             msg_type: "result",
@@ -47,7 +49,7 @@ impl ResultMsg {
             total_done,
             best_correct,
             best_arr,
-            elapsed,
+            best_index,
         }
     }
 }
@@ -72,6 +74,12 @@ pub struct ServerMsg {
     pub msg_type: String,
 
     #[serde(default)]
+    pub uuid: Option<String>,
+    #[serde(default)]
+    pub nickname: Option<String>,
+    #[serde(default)]
+    pub code: Option<String>,
+    #[serde(default)]
     pub lifetime_shuffles: Option<u64>,
     #[serde(default)]
     pub all_time_best: Option<u32>,
@@ -79,7 +87,7 @@ pub struct ServerMsg {
     #[serde(default)]
     pub seed: Option<String>,
     #[serde(default)]
-    pub batch_size: Option<u64>,
+    pub count: Option<u64>,
 
     #[serde(default)]
     pub credit: Option<u64>,
@@ -89,7 +97,15 @@ pub struct ServerMsg {
     pub session_best: Option<u32>,
     #[serde(default)]
     pub batch_best: Option<u32>,
+    #[serde(default)]
+    pub tick_best: Option<u32>,
 
     #[serde(default)]
     pub reason: Option<String>,
+
+    #[serde(default)]
+    pub expires_at: Option<u64>,
+
+    #[serde(default)]
+    pub batch_size: Option<u64>,
 }

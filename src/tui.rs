@@ -32,9 +32,9 @@ struct App {
     last_lb_fetch: Instant,
     last_tick: Instant,
     should_quit: bool,
-    login_input: String,
-    login_error: Option<String>,
-    logged_in: bool,
+    nick_input: String,
+    onboard_error: Option<String>,
+    onboarded: bool,
 }
 
 impl App {
@@ -42,7 +42,7 @@ impl App {
         let config = Config::load();
         let stats = Arc::new(Stats::new());
         Self {
-            logged_in: config.has_credentials(),
+            onboarded: config.has_credentials(),
             config,
             stats,
             pool: None,
@@ -54,8 +54,8 @@ impl App {
             last_lb_fetch: Instant::now() - Duration::from_secs(60),
             last_tick: Instant::now(),
             should_quit: false,
-            login_input: String::new(),
-            login_error: None,
+            nick_input: String::new(),
+            onboard_error: None,
         }
     }
 
@@ -85,7 +85,7 @@ impl App {
             if let Some(pool) = &mut self.pool {
                 let uuid = self.config.uuid.clone().unwrap_or_default();
                 let nick = self.config.nickname.clone().unwrap_or_default();
-                let code = self.config.code.clone().unwrap_or_default();
+                let code = self.config.recovery_code.clone().unwrap_or_default();
                 pool.set_cpu_target(self.cpu_target, &uuid, &nick, &code);
             }
         }
@@ -98,37 +98,16 @@ pub fn run(cpu_target: f64, code: Option<String>, autostart: bool) {
     let mut app = App::new(cpu_target);
 
     if let Some(c) = code {
-        app.config.code = Some(c);
+        app.config.recovery_code = Some(c);
         app.config.save();
     }
 
     if app.config.has_credentials() {
-        let code = app.config.code.clone().unwrap();
-        match rt.block_on(api::login(&code)) {
-            Ok(info) => {
-                app.config.uuid = Some(info.uuid);
-                app.config.nickname = Some(info.nickname);
-                app.config.save();
-                app.stats
-                    .lifetime_shuffles
-                    .store(info.total, Ordering::Relaxed);
-                app.stats
-                    .all_time_best
-                    .store(info.all_time_best as i32, Ordering::Relaxed);
-                app.logged_in = true;
-                app.status_msg = format!(
-                    "logged in as {}",
-                    app.config.nickname.as_deref().unwrap_or("?")
-                );
-            }
-            Err(e) => {
-                app.login_error = Some(e);
-                app.logged_in = false;
-            }
-        }
+        app.onboarded = true;
+        app.status_msg = format!("ready as {}", app.config.nickname.as_deref().unwrap_or("?"));
     }
 
-    if autostart && app.logged_in {
+    if autostart && app.onboarded {
         start_mining(&mut app, &rt);
     }
 
@@ -166,6 +145,12 @@ pub fn run(cpu_target: f64, code: Option<String>, autostart: bool) {
                     app.status_msg = "stopped (all workers exited)".into();
                 }
             }
+
+            if let Some(rc) = pool.poll_recovery_code() {
+                app.config.recovery_code = Some(rc);
+                app.config.save();
+                app.status_msg = "recovery code saved".into();
+            }
         }
 
         if app.last_lb_fetch.elapsed() >= Duration::from_secs(10) {
@@ -187,7 +172,7 @@ pub fn run(cpu_target: f64, code: Option<String>, autostart: bool) {
 fn start_mining(app: &mut App, rt: &tokio::runtime::Runtime) {
     let uuid = app.config.uuid.clone().unwrap_or_default();
     let nick = app.config.nickname.clone().unwrap_or_default();
-    let code = app.config.code.clone().unwrap_or_default();
+    let code = app.config.recovery_code.clone().unwrap_or_default();
 
     let mut pool = Pool::new(app.stats.clone());
     let _guard = rt.enter();
@@ -207,49 +192,38 @@ fn stop_mining(app: &mut App) {
 }
 
 fn handle_key(app: &mut App, key: KeyCode, rt: &tokio::runtime::Runtime) {
-    if !app.logged_in {
+    if !app.onboarded {
         match key {
             KeyCode::Char(c) => {
-                if app.login_input.len() < 19 {
-                    let raw_len = app.login_input.replace("-", "").len();
-                    if raw_len > 0
-                        && raw_len % 4 == 0
-                        && !app.login_input.ends_with('-')
-                        && raw_len < 16
-                    {
-                        app.login_input.push('-');
-                    }
-                    app.login_input.push(c);
+                if app.nick_input.len() < 8 && c.is_ascii() && !c.is_whitespace() {
+                    app.nick_input.push(c);
                 }
             }
             KeyCode::Backspace => {
-                app.login_input.pop();
+                app.nick_input.pop();
             }
             KeyCode::Enter => {
-                let code = app.login_input.trim().to_lowercase();
-                app.login_error = None;
-                match rt.block_on(api::login(&code)) {
-                    Ok(info) => {
-                        app.config.code = Some(code);
-                        app.config.uuid = Some(info.uuid);
-                        app.config.nickname = Some(info.nickname);
-                        app.config.save();
-                        app.stats
-                            .lifetime_shuffles
-                            .store(info.total, Ordering::Relaxed);
-                        app.stats
-                            .all_time_best
-                            .store(info.all_time_best as i32, Ordering::Relaxed);
-                        app.logged_in = true;
-                        app.status_msg = format!(
-                            "logged in as {}",
-                            app.config.nickname.as_deref().unwrap_or("?")
-                        );
-                    }
-                    Err(e) => {
-                        app.login_error = Some(e);
-                    }
+                let nick = app.nick_input.trim().to_string();
+                app.onboard_error = None;
+                if nick.len() < 2 {
+                    app.onboard_error = Some("nickname must be at least 2 chararcters".into());
+                    return;
                 }
+                if nick.len() > 8 {
+                    app.onboard_error = Some("nickname must be at most 8 characters".into());
+                    return;
+                }
+                if app.config.uuid.is_none() {
+                    app.config.uuid = Some(api::generate_uuid());
+                }
+                app.config.nickname = Some(nick);
+                app.config.save();
+                app.onboarded = true;
+                app.status_msg = format!(
+                    "ready as {} - press [s] to start",
+                    app.config.nickname.as_deref().unwrap_or("?")
+                );
+                let _ = rt;
             }
             KeyCode::Esc => {
                 app.should_quit = true;
@@ -278,9 +252,9 @@ fn handle_key(app: &mut App, key: KeyCode, rt: &tokio::runtime::Runtime) {
                 stop_mining(app);
             }
             app.config.clear();
-            app.logged_in = false;
-            app.login_input.clear();
-            app.login_error = None;
+            app.onboarded = false;
+            app.nick_input.clear();
+            app.onboard_error = None;
         }
         _ => {}
     }
@@ -289,8 +263,8 @@ fn handle_key(app: &mut App, key: KeyCode, rt: &tokio::runtime::Runtime) {
 fn draw_ui(f: &mut Frame, app: &App) {
     let area = f.area();
 
-    if !app.logged_in {
-        draw_login(f, area, app);
+    if !app.onboarded {
+        draw_onboard(f, area, app);
         return;
     }
 
@@ -335,7 +309,7 @@ fn draw_header(f: &mut Frame, area: Rect) {
     f.render_widget(header, area);
 }
 
-fn draw_login(f: &mut Frame, area: Rect, app: &App) {
+fn draw_onboard(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(3), Constraint::Min(0)])
@@ -356,7 +330,7 @@ fn draw_login(f: &mut Frame, area: Rect, app: &App) {
         .horizontal_margin(4)
         .split(chunks[1]);
 
-    let title = Paragraph::new("enter your account code").style(
+    let title = Paragraph::new("pick a nickname").style(
         Style::default()
             .fg(Color::White)
             .add_modifier(Modifier::BOLD),

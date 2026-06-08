@@ -1,58 +1,59 @@
-use crate::rng::Xoshiro128PlusPlus;
+use crate::rng::{shuffle_seed, Xoshiro128PlusPlus};
 
 pub const N: usize = 25; // update if el count ever changes, should get warning from swap
 
 #[derive(Debug, Clone)]
-pub struct BatchResult {
-    pub seed: String,
-    pub total_done: u64,
+pub struct RangeResult {
+    pub count: u64,
     pub best_correct: i32,
     pub best_arr: [u8; N],
-    pub elapsed: f64,
+    pub best_index: u64,
 }
 
-#[inline(never)] // for profiling
-pub fn run_batch(seed_str: &str, batch_size: u64) -> BatchResult {
-    let seed64: u64 = seed_str.parse().unwrap_or(0);
-    let mut rng = Xoshiro128PlusPlus::from_seed(seed64);
+#[inline(always)]
+pub fn one_shuffle(seed64: u64, index: u64) -> (i32, [u8; N]) {
+    let seed_i = shuffle_seed(seed64, index);
+    let mut rng = Xoshiro128PlusPlus::from_seed(seed_i);
 
     let mut arr = [0u8; N];
     for i in 0..N {
         arr[i] = (i + 1) as u8;
     }
 
-    let mut best_correct: i32 = -1;
-    let mut best_arr = [0u8; N];
+    for i in (1..N).rev() {
+        let j = rng.next_bounded((i + 1) as u32) as usize;
+        arr.swap(i, j);
+    }
 
-    let start = std::time::Instant::now();
-
-    for _ in 0..batch_size {
-        for i in (1..N).rev() {
-            let j = rng.next_bounded((i + 1) as u32) as usize;
-            arr.swap(i, j);
-        }
-
-        let mut correct: i32 = 0;
-        for i in 0..N {
-            if arr[i] == (i + 1) as u8 {
-                correct += 1;
-            }
-        }
-
-        if correct > best_correct {
-            best_correct = correct;
-            best_arr = arr;
+    let mut correct: i32 = 0;
+    for i in 0..N {
+        if arr[i] == (i + 1) as u8 {
+            correct += 1;
         }
     }
 
-    let elapsed = start.elapsed().as_secs_f64();
+    (correct, arr)
+}
 
-    BatchResult {
-        seed: seed_str.to_string(),
-        total_done: batch_size,
+pub fn run_range(seed64: u64, lo: u64, hi: u64) -> RangeResult {
+    let mut best_correct: i32 = -1;
+    let mut best_arr = [0u8; N];
+    let mut best_index: u64 = lo;
+
+    for i in lo..hi {
+        let (correct, arr) = one_shuffle(seed64, i);
+        if correct > best_correct {
+            best_correct = correct;
+            best_arr = arr;
+            best_index = i;
+        }
+    }
+
+    RangeResult {
+        count: hi - lo,
         best_correct,
         best_arr,
-        elapsed,
+        best_index,
     }
 }
 
@@ -61,24 +62,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_batch_produces_valid_permutation() {
-        let result = run_batch("12345", 100);
-        // best_arr must be permutation of [1,.25]
-        let mut sorted = result.best_arr;
+    fn test_one_shuffle_valid_permutation() {
+        let (correct, arr) = one_shuffle(12345, 0);
+        let mut sorted = arr;
         sorted.sort();
         for i in 0..N {
             assert_eq!(sorted[i], (i + 1) as u8);
         }
-        assert!(result.best_correct >= 0);
-        assert!(result.best_correct <= N as i32);
-        assert_eq!(result.total_done, 100);
+        assert!(correct >= 0 && correct <= N as i32);
     }
 
     #[test]
-    fn test_deterministic_output() {
-        let a = run_batch("9999", 500);
-        let b = run_batch("9999", 500);
-        assert_eq!(a.best_correct, b.best_correct);
-        assert_eq!(a.best_arr, b.best_arr);
+    fn test_one_shuffle_deterministic() {
+        let (c1, a1) = one_shuffle(12345, 42);
+        let (c2, a2) = one_shuffle(12345, 42);
+        assert_eq!(c1, c2);
+        assert_eq!(a1, a2);
+    }
+
+    #[test]
+    fn test_run_range_tracks_best_index() {
+        let result = run_range(12345, 0, 10000);
+        let (correct, arr) = one_shuffle(12345, result.best_index);
+        assert_eq!(correct, result.best_correct);
+        assert_eq!(arr, result.best_arr);
+    }
+
+    #[test]
+    fn test_run_range_count() {
+        let result = run_range(999, 100, 600);
+        assert_eq!(result.count, 500);
     }
 }

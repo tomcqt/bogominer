@@ -14,6 +14,9 @@ pub struct Stats {
     pub current_second_best: AtomicI32,
     pub last5_packed: AtomicU64,
     pub error_gen: AtomicU64,
+    pub lease_cursor: AtomicU64,
+    pub lease_count: AtomicU64,
+    pub solver_threads: AtomicU64,
 }
 
 impl Stats {
@@ -30,6 +33,9 @@ impl Stats {
             current_second_best: AtomicI32::new(-1),
             last5_packed: AtomicU64::new(0),
             error_gen: AtomicU64::new(0),
+            lease_cursor: AtomicU64::new(0),
+            lease_count: AtomicU64::new(0),
+            solver_threads: AtomicU64::new(0),
         }
     }
 
@@ -41,6 +47,8 @@ impl Stats {
         self.current_second_best.store(-1, ORD);
         self.last5_packed.store(0, ORD);
         self.total_credited.store(0, ORD);
+        self.lease_count.store(0, ORD);
+        self.lease_cursor.store(0, ORD);
     }
 
     pub fn note_batch_best(&self, best: i32) {

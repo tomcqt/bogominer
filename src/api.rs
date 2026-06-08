@@ -34,45 +34,6 @@ pub struct LeaderboardResponse {
     pub top: Vec<LeaderboardEntry>,
 }
 
-pub async fn login(code: &str) -> Result<AccountInfo, String> {
-    let client: Client = Client::new();
-    let resp = client
-        .post(format!("{}/account/login", API_URL))
-        .json(&serde_json::json!({ "code": code}))
-        .send()
-        .await
-        .map_err(|e| format!("network error: {}", e))?;
-
-    if resp.status() == reqwest::StatusCode::NOT_FOUND {
-        return Err("no account with that code.".into());
-    }
-    if !resp.status().is_success() {
-        return Err(format!("server error: {}", resp.status()));
-    }
-
-    resp.json::<AccountInfo>()
-        .await
-        .map_err(|e| format!("parse error: {}", e))
-}
-
-pub async fn get_me(uuid: &str) -> Result<AccountInfo, String> {
-    let client = Client::new();
-    let resp = client
-        .get(format!("{}/account/me", API_URL))
-        .query(&[("uuid", uuid)])
-        .send()
-        .await
-        .map_err(|e| format!("network error: {}", e))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("server error: {}", resp.status()));
-    }
-
-    resp.json::<AccountInfo>()
-        .await
-        .map_err(|e| format!("parse error: {}", e))
-}
-
 pub async fn get_leaderboard(limit: u32) -> Result<Vec<LeaderboardEntry>, String> {
     let client = Client::new();
     let resp = client
@@ -92,4 +53,15 @@ pub async fn get_leaderboard(limit: u32) -> Result<Vec<LeaderboardEntry>, String
         .map_err(|e| format!("parse error: {}", e))?;
 
     Ok(lb.top)
+}
+
+pub fn generate_uuid() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let pid = std::process::id() as u128;
+    let mixed = (nanos ^ (pid << 64)) ^ ((nanos >> 7).wrapping_mul(0x9e3779b97f4a7c15));
+    format!("{:032x}", mixed)
 }
