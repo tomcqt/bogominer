@@ -78,27 +78,13 @@ pub fn fmt_xp(n: u64) -> String {
     }
 }
 
-pub fn parse_hex_color(hex: &str) -> ratatui::style::Color {
-    use ratatui::style::Color;
-
-    let hex = hex.trim_start_matches('#');
-    if hex.len() != 6 {
-        return Color::White;
+pub fn validate_nick(nick: &str) -> Result<String, String> {
+    let nick = nick.trim();
+    if nick.len() < 2 {
+        return Err("nickname must be at least 2 characters".into());
     }
-    let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(255);
-    let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(255);
-    let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(255);
-    Color::Rgb(r, g, b)
-}
-
-pub fn hex_to_color32(hex: &str) -> eframe::egui::Color32 {
-    use eframe::egui::Color32;
-    let hex = hex.trim_start_matches('#');
-    if hex.len() != 6 {
-        return Color32::from_rgb(0xe8, 0xe4, 0xdb);
+    if nick.len() > 8 {
+        return Err("nickname must be at most 8 characters".into());
     }
-    let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(255);
-    let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(255);
-    let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(255);
-    Color32::from_rgb(r, g, b)
+    Ok(nick.to_string())
 }

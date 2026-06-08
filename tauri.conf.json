@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "bogominer",
+  "version": "0.1.0",
+  "identifier": "sh.tomcat.bogominer",
+  "build": {
+    "frontendDist": "src/ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "bogominer",
+        "width": 980,
+        "height": 760,
+        "minWidth": 760,
+        "minHeight": 560,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' https://gitlab.com https://secure.gravatar.com data:; connect-src 'self' https://gitlab.com https://bogo.swapjs.dev wss://bogo.swapjs.dev; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": []
+  }
+}
