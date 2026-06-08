@@ -6,8 +6,11 @@ const API_URL: &str = "https://bogo.swapjs.dev/api";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountInfo {
+    #[serde(default)]
     pub uuid: String,
+    #[serde(default)]
     pub nickname: String,
+    #[serde(default)]
     pub code: String,
     #[serde(default)]
     pub total: u64,
@@ -35,6 +38,61 @@ pub struct LeaderboardResponse {
     pub top: Vec<LeaderboardEntry>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct CreatePayload<'a> {
+    nickname: &'a str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct LoginPayload<'a> {
+    code: &'a str,
+}
+
+pub async fn create_account(nickname: &str) -> Result<AccountInfo, String> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/account/create", API_URL))
+        .json(&CreatePayload { nickname })
+        .send()
+        .await
+        .map_err(|e| format!("network error: {}", e))?;
+
+    if resp.status() == reqwest::StatusCode::BAD_REQUEST {
+        let e = resp.json::<serde_json::Value>().await.unwrap_or_default();
+        let msg = e
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("bad request");
+        return Err(msg.to_string());
+    }
+    if !resp.status().is_success() {
+        return Err(format!("server error: {}", resp.status()));
+    }
+    resp.json::<AccountInfo>()
+        .await
+        .map_err(|e| format!("parse error: {}", e))
+}
+
+pub async fn login_with_code(code: &str) -> Result<AccountInfo, String> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/api/account/login", BASE_URL))
+        .json(&LoginPayload { code })
+        .send()
+        .await
+        .map_err(|e| format!("network error: {}", e))?;
+
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err("no account with that code.".into());
+    }
+    if !resp.status().is_success() {
+        return Err(format!("server error: {}", resp.status()));
+    }
+    resp.json::<AccountInfo>()
+        .await
+        .map_err(|e| format!("parse error: {}", e))
+}
+
 pub async fn get_leaderboard(limit: u32) -> Result<Vec<LeaderboardEntry>, String> {
     let client = Client::new();
     let resp = client
@@ -54,15 +112,4 @@ pub async fn get_leaderboard(limit: u32) -> Result<Vec<LeaderboardEntry>, String
         .map_err(|e| format!("parse error: {}", e))?;
 
     Ok(lb.top)
-}
-
-pub fn generate_uuid() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let pid = std::process::id() as u128;
-    let mixed = (nanos ^ (pid << 64)) ^ ((nanos >> 7).wrapping_mul(0x9e3779b97f4a7c15));
-    format!("{:032x}", mixed)
 }

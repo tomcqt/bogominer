@@ -48,6 +48,8 @@ impl Config {
     }
 
     pub fn has_credentials(&self) -> bool {
-        self.uuid.is_some() && self.nickname.is_some()
+        self.uuid.is_some()
+            && self.nickname.is_some()
+            && self.recovery_code.as_ref().is_some_and(|s| !s.is_empty())
     }
 }

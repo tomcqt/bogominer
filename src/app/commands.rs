@@ -50,12 +50,15 @@ pub fn get_app_state(state: State<AppState>) -> AppView {
 #[tauri::command]
 pub fn save_new_account(req: NewAccountRequest, state: State<AppState>) -> Result<AppView, String> {
     let nick = validate_nick(&req.nickname)?;
+    let info = state
+        .rt
+        .block_on(api::create_account(&nick))
+        .map_err(|e| e)?;
     {
         let mut config = state.config.lock();
-        if config.uuid.is_none() {
-            config.uuid = Some(api::generate_uuid());
-        }
-        config.nickname = Some(nick);
+        config.uuid = Some(info.uuid);
+        config.nickname = Some(info.nickname);
+        config.recovery_code = Some(info.code);
         config.save();
     }
     Ok(get_app_state(state))
@@ -66,24 +69,21 @@ pub fn save_existing_account(
     req: ExistingAccountRequest,
     state: State<AppState>,
 ) -> Result<AppView, String> {
-    let nick = validate_nick(&req.nickname)?;
-    let uuid = req.uuid.trim().to_string();
     let recovery_code = req.recovery_code.trim().to_string();
 
-    if uuid.len() < 16 || uuid.len() > 64 {
-        return Err("uuid must be 16-64 characters".into());
-    }
-    if !uuid.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
-        return Err("uuid must be hex characters or dashes".into());
-    }
     if recovery_code.is_empty() {
         return Err("recovery code is required".into());
     }
 
+    let info = state
+        .rt
+        .block_on(api::login_with_code(&recovery_code))
+        .map_err(|e| e)?;
+
     {
         let mut config = state.config.lock();
-        config.uuid = Some(uuid);
-        config.nickname = Some(nick);
+        config.uuid = Some(info.uuid);
+        config.nickname = Some(info.nickname);
         config.recovery_code = Some(recovery_code);
         config.save();
     }
@@ -119,12 +119,20 @@ pub fn stop_mining(state: State<AppState>) {
 #[tauri::command]
 pub fn set_cpu_target(cpu_target: f64, state: State<AppState>) -> Result<(), String> {
     let config = state.config.lock().clone();
-    let uuid = config.uuid.ok_or("missing uuid")?;
-    let nickname = config.nickname.ok_or("missing nickname")?;
-    let code = config.recovery_code.unwrap_or_default();
+    let uuid = config.uuid.as_deref().ok_or("missing uuid")?;
+    let nickname = config.nickname.as_deref().ok_or("missing nickname")?;
+    let code = config
+        .recovery_code
+        .as_deref()
+        .ok_or("missing recovery code")?;
 
     if let Some(pool) = state.pool.lock().as_mut() {
-        pool.set_cpu_target(cpu_target.clamp(0.05, 1.0), &uuid, &nickname, &code);
+        pool.set_cpu_target(
+            cpu_target.clamp(0.05, 1.0),
+            Some(uuid),
+            Some(nickname),
+            code,
+        );
     }
     Ok(())
 }
