@@ -29,8 +29,8 @@ pub struct NewAccountRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExistingAccountRequest {
-    pub uuid: String,
-    pub nickname: String,
+    pub _uuid: String,
+    pub _nickname: String,
     pub recovery_code: String,
 }
 

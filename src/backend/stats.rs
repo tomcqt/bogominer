@@ -13,7 +13,7 @@ pub struct Stats {
     pub total_credited: AtomicU64,
     pub current_second_best: AtomicI32,
     pub last5_packed: AtomicU64,
-    pub error_gen: AtomicU64,
+    pub _error_gen: AtomicU64,
     pub lease_cursor: AtomicU64,
     pub lease_count: AtomicU64,
     pub solver_threads: AtomicU64,
@@ -32,7 +32,7 @@ impl Stats {
             total_credited: AtomicU64::new(0),
             current_second_best: AtomicI32::new(-1),
             last5_packed: AtomicU64::new(0),
-            error_gen: AtomicU64::new(0),
+            _error_gen: AtomicU64::new(0),
             lease_cursor: AtomicU64::new(0),
             lease_count: AtomicU64::new(0),
             solver_threads: AtomicU64::new(0),
@@ -80,7 +80,7 @@ impl Stats {
         }
     }
 
-    pub fn tick_second(&self) {
+    pub fn _tick_second(&self) {
         let completed = self.current_second_best.swap(-1, ORD);
         self.tick_best.store(completed, ORD);
 
@@ -110,81 +110,5 @@ impl Stats {
         }
 
         result
-    }
-}
-
-pub struct TierInfo {
-    pub name: &'static str,
-    pub color_hex: &'static str,
-    pub stars: u64,
-    pub pct: f64,
-    pub next_label: String,
-    pub rem_xp: u64,
-    pub xp: u64,
-    pub tier_index: usize,
-}
-
-const TIERS: &[(&str, u64)] = &[
-    ("recruit", 0),
-    ("cadet", 1_000_000_000),
-    ("operator", 10_000_000_000),
-    ("engineer", 100_000_000_000),
-    ("architect", 1_000_000_000_000),
-    ("overseer", 10_000_000_000_000),
-    ("luminary", 100_000_000_000_000),
-];
-
-const TIER_COLORS: &[&str] = &[
-    "#8a847a", "#5b8fb4", "#4a9e6a", "#da7656", "#8b5cf6", "#c08a2e", "#d4493e",
-];
-
-const PRESTIGE_STEP: u64 = 100_000_000_000_000;
-const XP_PER: u64 = 10_000;
-
-pub fn rank_info(shuffles: u64) -> TierInfo {
-    let xp = shuffles / XP_PER;
-    let mut idx = 0;
-    for (i, &(_, min)) in TIERS.iter().enumerate() {
-        if shuffles >= min {
-            idx = i;
-        }
-    }
-
-    let luminary_idx = TIERS.len() - 1;
-
-    if idx < luminary_idx {
-        let cur = TIERS[idx].1;
-        let nxt = TIERS[idx + 1].1;
-        let pct = if nxt > cur {
-            ((shuffles - cur) as f64 / (nxt - cur) as f64 * 100.0).clamp(0.0, 100.0)
-        } else {
-            0.0
-        };
-        let rem_xp = (nxt.saturating_sub(shuffles)) / XP_PER;
-        TierInfo {
-            name: TIERS[idx].0,
-            color_hex: TIER_COLORS[idx],
-            stars: 0,
-            pct,
-            next_label: TIERS[idx + 1].0.to_string(),
-            rem_xp,
-            xp,
-            tier_index: idx,
-        }
-    } else {
-        let stars = (shuffles - TIERS[luminary_idx].1) / PRESTIGE_STEP;
-        let base = TIERS[luminary_idx].1 + stars * PRESTIGE_STEP;
-        let pct = ((shuffles - base) as f64 / PRESTIGE_STEP as f64 * 100.0).clamp(0.0, 100.0);
-        let rem_xp = (base + PRESTIGE_STEP - shuffles) / XP_PER;
-        TierInfo {
-            name: "luminary",
-            color_hex: TIER_COLORS[luminary_idx],
-            stars,
-            pct,
-            next_label: format!("\u{2726}{}", stars + 1),
-            rem_xp,
-            xp,
-            tier_index: luminary_idx,
-        }
     }
 }

@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 
 pub struct Pool {
     worker: Option<mpsc::UnboundedSender<WorkerCmd>>,
-    error_rx: mpsc::UnboundedReceiver<String>,
+    _error_rx: mpsc::UnboundedReceiver<String>,
     error_tx: mpsc::UnboundedSender<String>,
     code_rx: mpsc::UnboundedReceiver<String>,
     code_tx: mpsc::UnboundedSender<String>,
@@ -15,11 +15,11 @@ pub struct Pool {
 
 impl Pool {
     pub fn new(stats: Arc<Stats>) -> Self {
-        let (error_tx, error_rx) = mpsc::unbounded_channel();
+        let (error_tx, _error_rx) = mpsc::unbounded_channel();
         let (code_tx, code_rx) = mpsc::unbounded_channel();
         Self {
             worker: None,
-            error_rx,
+            _error_rx,
             error_tx,
             code_rx,
             code_tx,
@@ -66,8 +66,8 @@ impl Pool {
         }
     }
 
-    pub fn poll_error(&mut self) -> Option<String> {
-        self.error_rx.try_recv().ok()
+    pub fn _poll_error(&mut self) -> Option<String> {
+        self._error_rx.try_recv().ok()
     }
 
     pub fn poll_recovery_code(&mut self) -> Option<String> {
@@ -78,7 +78,7 @@ impl Pool {
         self.stats.active_workers.load(Ordering::Relaxed) > 0
     }
 
-    pub fn solver_thread_count(&self) -> usize {
+    pub fn _solver_thread_count(&self) -> usize {
         self.stats.solver_threads.load(Ordering::Relaxed) as usize
     }
 }

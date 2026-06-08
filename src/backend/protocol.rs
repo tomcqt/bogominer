@@ -74,9 +74,9 @@ pub struct ServerMsg {
     pub msg_type: String,
 
     #[serde(default)]
-    pub uuid: Option<String>,
+    pub _uuid: Option<String>,
     #[serde(default)]
-    pub nickname: Option<String>,
+    pub _nickname: Option<String>,
     #[serde(default)]
     pub code: Option<String>,
     #[serde(default)]
@@ -98,14 +98,14 @@ pub struct ServerMsg {
     #[serde(default)]
     pub batch_best: Option<u32>,
     #[serde(default)]
-    pub tick_best: Option<u32>,
+    pub _tick_best: Option<u32>,
 
     #[serde(default)]
     pub reason: Option<String>,
 
     #[serde(default)]
-    pub expires_at: Option<u64>,
+    pub _expires_at: Option<u64>,
 
     #[serde(default)]
-    pub batch_size: Option<u64>,
+    pub _batch_size: Option<u64>,
 }
