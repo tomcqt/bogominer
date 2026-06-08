@@ -1,5 +1,5 @@
-use crate::stats::Stats;
-use crate::worker::{self, WorkerCmd};
+use crate::backend::stats::Stats;
+use crate::backend::worker::{self, WorkerCmd};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::mpsc;

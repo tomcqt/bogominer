@@ -1,6 +1,6 @@
-use crate::protocol::{HelloMsg, ResultMsg, ServerMsg, StopMsg};
-use crate::solver;
-use crate::stats::Stats;
+use crate::backend::protocol::{HelloMsg, ResultMsg, ServerMsg, StopMsg};
+use crate::backend::solver;
+use crate::backend::stats::Stats;
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};

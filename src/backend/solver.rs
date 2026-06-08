@@ -1,4 +1,4 @@
-use crate::rng::{shuffle_seed, Xoshiro128PlusPlus};
+use crate::backend::rng::{shuffle_seed, Xoshiro128PlusPlus};
 
 pub const N: usize = 25; // update if el count ever changes, should get warning from swap
 
