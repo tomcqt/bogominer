@@ -13,6 +13,7 @@ pub fn run() {
             commands::set_cpu_target,
             commands::get_runtime_stats,
             commands::get_contributors,
+            commands::get_leaderboard,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run tauri app");

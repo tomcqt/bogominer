@@ -1,6 +1,6 @@
 [package]
 name = "bogominer"
-description = "an open-source native bogosort miner for swapjs' bogostream."
+description = "an official open-source native bogosort miner for swapjs' bogostream."
 authors = ["tomcat <hi@tomcat.sh>"]
 version = "0.1.0"
 edition = "2021"

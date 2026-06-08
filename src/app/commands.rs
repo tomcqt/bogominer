@@ -14,17 +14,20 @@ const GITLAB_PROJECT_PATH: &str = "ttomcat/bogominer";
 const CONTRIBUTORS_CACHE_MAX_AGE: Duration = Duration::from_secs(60 * 60 * 24);
 
 #[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppView {
     pub account: AccountView,
     pub version: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NewAccountRequest {
     pub nickname: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExistingAccountRequest {
     pub uuid: String,
     pub nickname: String,
@@ -167,6 +170,11 @@ pub async fn get_contributors() -> Result<Vec<Contributor>, String> {
     let contributors = fetch_gitlab_contributors().await?;
     write_contributors_cache(&contributors);
     Ok(contributors)
+}
+
+#[tauri::command]
+pub async fn get_leaderboard() -> Result<Vec<crate::backend::api::LeaderboardEntry>, String> {
+    crate::backend::api::get_leaderboard(20).await
 }
 
 // contributor helper functions

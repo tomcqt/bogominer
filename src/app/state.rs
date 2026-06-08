@@ -21,6 +21,7 @@ impl AppState {
 }
 
 #[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AccountView {
     pub uuid: Option<String>,
     pub nickname: Option<String>,
@@ -28,6 +29,7 @@ pub struct AccountView {
 }
 
 #[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeStats {
     pub running: bool,
     pub session_shuffles: u64,
@@ -44,6 +46,7 @@ pub struct RuntimeStats {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Contributor {
     pub name: String,
     pub avatar_url: String,

@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bogominer</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <div class="nav-inner">
+        <div class="logo">bogo<span>miner.</span></div>
+        <div class="nav-actions">
+          <button class="nav-pill" id="settings-btn">settings</button>
+          <button
+            class="theme-toggle"
+            id="theme-toggle"
+            aria-label="toggle theme"
+          >
+            <span id="theme-icon">dark</span>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <main>
+      <div class="container">
+        <header class="page-head">
+          <div class="title-block">
+            <h1>bogo<span>miner.</span></h1>
+            <p>native crowd-compute client for the 24/7 bogosort stream.</p>
+          </div>
+        </header>
+
+        <section class="section" id="onboard-section">
+          <div class="section-label">your account</div>
+          <div class="card">
+            <div class="card-body">
+              <div class="tabs">
+                <button class="tab active" data-tab="new">new account</button>
+                <button class="tab" data-tab="existing">
+                  existing account
+                </button>
+              </div>
+
+              <div class="tab-pane active" id="tab-new">
+                <h3 class="pane-title">pick a display name</h3>
+                <p class="pane-sub">
+                  2–8 chars. the server will issue your uuid and recovery code
+                  after first start.
+                </p>
+                <label class="input-label" for="new-nick">name</label>
+                <input
+                  class="input"
+                  id="new-nick"
+                  maxlength="8"
+                  placeholder="e.g. dingus"
+                  autocomplete="off"
+                />
+                <div class="err" id="new-error"></div>
+                <div class="pane-actions">
+                  <button class="btn btn-primary" id="save-new">
+                    continue
+                  </button>
+                </div>
+              </div>
+
+              <div class="tab-pane" id="tab-existing">
+                <h3 class="pane-title">use an existing account</h3>
+                <p class="pane-sub">
+                  enter your recovery code. the server will return your uuid and
+                  name.
+                </p>
+                <label class="input-label" for="existing-code"
+                  >recovery code</label
+                >
+                <input
+                  class="input mono"
+                  id="existing-code"
+                  placeholder="xxxx-xxxx-xxxx-xxxx"
+                  autocomplete="off"
+                />
+                <div class="err" id="existing-error"></div>
+                <div class="pane-actions">
+                  <button class="btn btn-primary" id="save-existing">
+                    continue
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="dashboard-section" hidden>
+          <div class="section-label">operator console</div>
+          <div class="card">
+            <div class="card-body">
+              <div class="signed-in">
+                <div class="si-head">
+                  <span class="si-meta">contributing as</span>
+                  <button class="link-tertiary" id="switch-account">
+                    switch account
+                  </button>
+                </div>
+
+                <h2 class="si-name" id="account-name">pending</h2>
+
+                <div class="account-row">
+                  <span class="account-chip" id="uuid-chip"
+                    >waiting for server uuid</span
+                  >
+                  <span class="account-chip" id="code-chip"
+                    >recovery code pending</span
+                  >
+                </div>
+
+                <div class="console-controls">
+                  <div id="idle-controls">
+                    <button class="btn btn-primary btn-lg" id="start-btn">
+                      start bogosorting →
+                    </button>
+                    <div class="connect-error" id="connect-error"></div>
+                  </div>
+
+                  <div id="active-controls" class="live-controls" hidden>
+                    <div class="live-controls-left">
+                      <div class="live-pill">contributing live</div>
+                      <div
+                        class="cpu-options cpu-options-live"
+                        id="cpu-options-live"
+                      >
+                        <button class="cpu-opt" data-cpu="0.10">tiny</button>
+                        <button class="cpu-opt" data-cpu="0.25">low</button>
+                        <button class="cpu-opt" data-cpu="0.50">medium</button>
+                        <button class="cpu-opt" data-cpu="0.75">high</button>
+                        <button class="cpu-opt active" data-cpu="1.00">
+                          max
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      class="stop-circle"
+                      id="stop-btn"
+                      aria-label="stop contributing"
+                      title="stop"
+                    >
+                      <span class="stop-icon"></span>
+                    </button>
+                  </div>
+                </div>
+
+                <div id="console-stats" hidden>
+                  <div class="status-grid">
+                    <div class="stat-block">
+                      <span class="stat-label">your rate</span>
+                      <span class="stat-value" id="stat-rate">0/s</span>
+                    </div>
+                    <div class="stat-block">
+                      <span class="stat-label">threads</span>
+                      <span class="stat-value" id="stat-threads">0</span>
+                    </div>
+                    <div class="stat-block">
+                      <span class="stat-label">last 1s best</span>
+                      <span class="stat-value" id="stat-tick-best">— / 25</span>
+                    </div>
+                    <div class="stat-block">
+                      <span class="stat-label">session best</span>
+                      <span class="stat-value" id="stat-session-best"
+                        >— / 25</span
+                      >
+                    </div>
+                    <div class="stat-block">
+                      <span class="stat-label">all-time best</span>
+                      <span class="stat-value" id="stat-alltime-best"
+                        >— / 25</span
+                      >
+                    </div>
+                    <div class="stat-block">
+                      <span class="stat-label">last 5 best</span>
+                      <span class="stat-value last5" id="stat-last5"
+                        ><span class="l5-dash">—</span></span
+                      >
+                    </div>
+                    <div class="stat-block">
+                      <span class="stat-label">this session</span>
+                      <span class="stat-value" id="stat-session">0</span>
+                    </div>
+                    <div class="stat-block">
+                      <span class="stat-label">lifetime</span>
+                      <span class="stat-value" id="stat-lifetime">0</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="console-div"></div>
+
+                <div class="tier-block">
+                  <div class="tier-top">
+                    <span class="tier-name" id="tier-name">recruit</span>
+                    <span class="tier-xp" id="tier-xp">0 xp</span>
+                  </div>
+                  <div class="tier-bar">
+                    <div class="tier-bar-fill" id="tier-bar-fill"></div>
+                  </div>
+                  <div class="tier-next" id="tier-next">
+                    <strong>100k xp</strong> to cadet
+                  </div>
+                  <div class="tier-pips" id="tier-pips"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="card">
+            <div class="card-body">
+              <div class="lb-head">
+                <div class="section-label">leaderboard</div>
+                <div class="lb-note">top 20 · total shuffles</div>
+              </div>
+              <div class="lb-table" id="leaderboard">
+                <div class="lb-empty">loading leaderboard…</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div class="modal-backdrop" id="settings-modal" aria-hidden="true">
+      <div class="modal-card settings-card">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">settings</div>
+            <div class="modal-sub">app preferences and build info.</div>
+          </div>
+          <button
+            class="icon-btn"
+            id="settings-close"
+            aria-label="close settings"
+          >
+            ×
+          </button>
+        </div>
+
+        <div class="settings-row">
+          <div>
+            <div class="setting-title">
+              GPU acceleration <span class="beta-pill">beta</span>
+            </div>
+            <div class="setting-sub">
+              planned native compute backend. disabled for now.
+            </div>
+          </div>
+          <label class="switch disabled">
+            <input type="checkbox" id="gpu-toggle" disabled />
+            <span></span>
+          </label>
+        </div>
+
+        <div class="settings-row">
+          <div>
+            <div class="setting-title">version</div>
+            <div class="setting-sub" id="version-label">loading…</div>
+          </div>
+        </div>
+
+        <div class="settings-block">
+          <div class="setting-title">contributors</div>
+          <div class="setting-sub">
+            loaded from GitLab once per launch and cached locally.
+          </div>
+          <div class="contributors" id="contributors">
+            <div class="contributors-empty">loading contributors…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
