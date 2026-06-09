@@ -319,6 +319,7 @@ struct GitLabUser {
     web_url: String,
 }
 
+#[derive(Debug, Deserialize)]
 struct GitLabMember {
     name: String,
     avatar_url: Option<String>,
