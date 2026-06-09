@@ -100,7 +100,8 @@ function rankInfo(shuffles) {
 function applyTheme(theme) {
   const t = theme === 'dark' ? 'dark' : 'light';
   document.documentElement.dataset.theme = t;
-  $('theme-icon').textContent = t === 'dark' ? 'light' : 'dark';
+  $('theme-icon-sun').style.display = t === 'dark' ? 'inline' : 'none';
+  $('theme-icon-moon').style.display = t === 'dark' ? 'none' : 'inline';
   localStorage.setItem(THEME_KEY, t);
 }
 
@@ -252,7 +253,7 @@ function setCpuTarget(next) {
 
 async function refreshAppState() {
   appState = await invoke('get_app_state');
-  $('version-label').textContent = `Bogominer ${appState.version}`;
+  $('version-label').textContent = `bogominer ${appState.version}`;
   updateAccountView();
 }
 
