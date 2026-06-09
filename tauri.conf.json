@@ -19,7 +19,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' https://gitlab.com https://secure.gravatar.com data:; connect-src 'self' https://gitlab.com https://bogo.swapjs.dev wss://bogo.swapjs.dev; style-src 'self' 'unsafe-inline'; script-src 'self'"
+      "csp": "default-src 'self'; img-src 'self' https://github.com https://avatars.githubusercontent.com https://secure.gravatar.com data:; connect-src 'self' https://api.github.com https://bogo.swapjs.dev wss://bogo.swapjs.dev; style-src 'self' 'unsafe-inline'; script-src 'self'"
     }
   },
   "bundle": {

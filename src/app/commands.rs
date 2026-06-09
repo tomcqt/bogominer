@@ -10,7 +10,7 @@ use std::{
 };
 use tauri::State;
 
-const GITLAB_PROJECT_PATH: &str = "ttomcat/bogominer";
+const GITHUB_REPO: &str = "tomcqt/bogominer";
 const CONTRIBUTORS_CACHE_MAX_AGE: Duration = Duration::from_secs(60 * 60 * 24);
 
 #[derive(Debug, serde::Serialize)]
@@ -240,7 +240,7 @@ pub async fn get_contributors() -> Result<Vec<Contributor>, String> {
         return Ok(cached);
     }
 
-    match fetch_gitlab_contributors().await {
+    match fetch_github_contributors().await {
         Ok(contributors) if !contributors.is_empty() => {
             write_contributors_cache(&contributors);
             Ok(contributors)
@@ -257,8 +257,8 @@ pub async fn get_leaderboard() -> Result<Vec<crate::backend::api::LeaderboardEnt
 
 #[tauri::command]
 pub fn open_external(url: String, app: tauri::AppHandle) -> Result<(), String> {
-    if !(url.starts_with("https://gitlab.com/") || url.starts_with("https://www.gitlab.com/")) {
-        return Err("only gitlab links can be opened from here".into());
+    if !(url.starts_with("https://github.com/") || url.starts_with("https://www.github.com/")) {
+        return Err("only github links can be opened from here".into());
     }
 
     tauri_plugin_opener::OpenerExt::opener(&app)
@@ -302,158 +302,38 @@ fn write_contributors_cache(contributors: &[Contributor]) {
 }
 
 #[derive(Debug, Deserialize)]
-struct GitLabProject {
-    id: u64,
+struct GithubContributor {
+    login: String,
+    avatar_url: String,
+    html_url: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct GitLabContributor {
-    name: String,
-    email: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GitLabUser {
-    name: String,
-    avatar_url: Option<String>,
-    web_url: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct GitLabMember {
-    name: String,
-    avatar_url: Option<String>,
-    web_url: String,
-}
-
-async fn fetch_gitlab_contributors() -> Result<Vec<Contributor>, String> {
+async fn fetch_github_contributors() -> Result<Vec<Contributor>, String> {
     let client = reqwest::Client::new();
-    let encoded = urlencoding::encode(GITLAB_PROJECT_PATH);
-
-    let project: GitLabProject = client
-        .get(format!("https://gitlab.com/api/v4/projects/{}", encoded))
-        .header("User-Agent", "Bogominer")
-        .send()
-        .await
-        .map_err(|e| format!("gitlab project request failed: {}", e))?
-        .error_for_status()
-        .map_err(|e| format!("gitlab project error: {}", e))?
-        .json()
-        .await
-        .map_err(|e| format!("gitlab project parse failed: {}", e))?;
-
-    let members = client
+    let raw: Vec<GithubContributor> = client
         .get(format!(
-            "https://gitlab.com/api/v4/projects/{}/members/all",
-            project.id
+            "https://api.github.com/repos/{}/contributors",
+            GITHUB_REPO
         ))
         .query(&[("per_page", "20")])
         .header("User-Agent", "Bogominer")
+        .header("Accept", "application/vnd.github+json")
         .send()
         .await
-        .ok()
-        .and_then(|r| r.error_for_status().ok());
-
-    let mut out: Vec<Contributor> = Vec::new();
-
-    if let Some(resp) = members {
-        let members: Vec<GitLabMember> = resp.json().await.unwrap_or_default();
-        out.extend(members.into_iter().map(|m| {
-            let avatar_url = m
-                .avatar_url
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| initials_avatar(&m.name));
-            Contributor {
-                name: m.name,
-                avatar_url,
-                web_url: m.web_url,
-            }
-        }));
-    }
-
-    let raw_resp = client
-        .get(format!(
-            "https://gitlab.com/api/v4/projects/{}/repository/contributors",
-            project.id
-        ))
-        .query(&[("per_page", "20")])
-        .header("User-Agent", "Bogominer")
-        .send()
-        .await
-        .map_err(|e| format!("gitlab contributors request failed: {}", e))?
+        .map_err(|e| format!("github contributors request failed: {}", e))?
         .error_for_status()
-        .map_err(|e| format!("gitlab contributors error: {}", e))?;
-
-    let raw: Vec<GitLabContributor> = raw_resp
+        .map_err(|e| format!("github contributors error: {}", e))?
         .json()
         .await
-        .map_err(|e| format!("gitlab contributors parse failed: {}", e))?;
+        .map_err(|e| format!("github contributors parse failed: {}", e))?;
 
-    for c in raw.into_iter().take(20) {
-        if out.iter().any(|x| x.name.eq_ignore_ascii_case(&c.name)) {
-            continue;
-        }
-
-        if let Some(user) = find_gitlab_user(&client, &c).await {
-            let avatar_url = user
-                .avatar_url
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| initials_avatar(&user.name));
-            out.push(Contributor {
-                name: user.name,
-                avatar_url,
-                web_url: user.web_url,
-            });
-        } else {
-            out.push(Contributor {
-                name: c.name.clone(),
-                avatar_url: initials_avatar(&c.name),
-                web_url: format!(
-                    "https://gitlab.com/{}",
-                    urlencoding::encode(&c.name.replace(" ", ""))
-                ),
-            });
-        }
-    }
-
-    out.truncate(12);
-    Ok(out)
-}
-
-fn initials_avatar(name: &str) -> String {
-    let initials = name
-        .split_whitespace()
-        .filter_map(|part| part.chars().next())
-        .take(2)
-        .collect::<String>()
-        .to_uppercase();
-    let label = if initials.is_empty() { "?" } else { &initials };
-    format!(
-        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96'><rect width='96' height='96' rx='48' fill='%23da7656'/><text x='50%' y='55%' dominant-baseline='middle' text-anchor='middle' font-family='Inter,Arial,sans-serif' font-size='34' font-weight='700' fill='white'>{}</text></svg>",
-        urlencoding::encode(label)
-    )
-}
-
-async fn find_gitlab_user(client: &reqwest::Client, c: &GitLabContributor) -> Option<GitLabUser> {
-    let search = c
-        .email
-        .as_ref()
-        .and_then(|e| e.split('@').next())
-        .filter(|s| !s.is_empty())
-        .unwrap_or(&c.name);
-
-    let users: Vec<GitLabUser> = client
-        .get("https://gitlab.com/api/v4/users")
-        .query(&[("search", search)])
-        .header("User-Agent", "Bogominer")
-        .send()
-        .await
-        .ok()?
-        .error_for_status()
-        .ok()?
-        .json()
-        .await
-        .ok()?;
-
-    users.into_iter().next()
+    Ok(raw
+        .into_iter()
+        .take(12)
+        .map(|c| Contributor {
+            name: c.login,
+            avatar_url: c.avatar_url,
+            web_url: c.html_url,
+        })
+        .collect())
 }
