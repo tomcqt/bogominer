@@ -342,7 +342,7 @@ async fn fetch_gitlab_contributors() -> Result<Vec<Contributor>, String> {
         .await
         .map_err(|e| format!("gitlab project parse failed: {}", e))?;
 
-    let members: Vec<GitLabMember> = client
+    let members = client
         .get(format!(
             "https://gitlab.com/api/v4/projects/{}/members/all",
             project.id
@@ -351,30 +351,27 @@ async fn fetch_gitlab_contributors() -> Result<Vec<Contributor>, String> {
         .header("User-Agent", "Bogominer")
         .send()
         .await
-        .map_err(|e| format!("gitlab members request failed: {}", e))?
-        .error_for_status()
-        .map_err(|e| format!("gitlab members error: {}", e))?
-        .json()
-        .await
-        .map_err(|e| format!("gitlab members parse failed: {}", e))?;
+        .ok()
+        .and_then(|r| r.error_for_status().ok());
 
-    let from_members: Vec<Contributor> = members
-        .into_iter()
-        .filter_map(|m| {
-            let avatar_url = m.avatar_url?;
-            Some(Contributor {
+    let mut out: Vec<Contributor> = Vec::new();
+
+    if let Some(resp) = members {
+        let members: Vec<GitLabMember> = resp.json().await.unwrap_or_default();
+        out.extend(members.into_iter().map(|m| {
+            let avatar_url = m
+                .avatar_url
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| initials_avatar(&m.name));
+            Contributor {
                 name: m.name,
                 avatar_url,
                 web_url: m.web_url,
-            })
-        })
-        .collect();
-
-    if !from_members.is_empty() {
-        return Ok(from_members);
+            }
+        }));
     }
 
-    let raw: Vec<GitLabContributor> = client
+    let raw_resp = client
         .get(format!(
             "https://gitlab.com/api/v4/projects/{}/repository/contributors",
             project.id
@@ -385,23 +382,56 @@ async fn fetch_gitlab_contributors() -> Result<Vec<Contributor>, String> {
         .await
         .map_err(|e| format!("gitlab contributors request failed: {}", e))?
         .error_for_status()
-        .map_err(|e| format!("gitlab contributors error: {}", e))?
+        .map_err(|e| format!("gitlab contributors error: {}", e))?;
+
+    let raw: Vec<GitLabContributor> = raw_resp
         .json()
         .await
         .map_err(|e| format!("gitlab contributors parse failed: {}", e))?;
 
-    let mut out = Vec::new();
-    for c in raw.into_iter().take(12) {
-        let user = find_gitlab_user(&client, &c).await;
-        if let Some(user) = user {
+    for c in raw.into_iter().take(20) {
+        if out.iter().any(|x| x.name.eq_ignore_ascii_case(&c.name)) {
+            continue;
+        }
+
+        if let Some(user) = find_gitlab_user(&client, &c).await {
+            let avatar_url = user
+                .avatar_url
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| initials_avatar(&user.name));
             out.push(Contributor {
                 name: user.name,
-                avatar_url: user.avatar_url.unwrap_or_default(),
+                avatar_url,
                 web_url: user.web_url,
+            });
+        } else {
+            out.push(Contributor {
+                name: c.name.clone(),
+                avatar_url: initials_avatar(&c.name),
+                web_url: format!(
+                    "https://gitlab.com/{}",
+                    urlencoding::encode(&c.name.replace(" ", ""))
+                ),
             });
         }
     }
+
+    out.truncate(12);
     Ok(out)
+}
+
+fn initials_avatar(name: &str) -> String {
+    let initials = name
+        .split_whitespace()
+        .filter_map(|part| part.chars().next())
+        .take(2)
+        .collect::<String>()
+        .to_uppercase();
+    let label = if initials.is_empty() { "?" } else { &initials };
+    format!(
+        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96'><rect width='96' height='96' rx='48' fill='%23da7656'/><text x='50%' y='55%' dominant-baseline='middle' text-anchor='middle' font-family='Inter,Arial,sans-serif' font-size='34' font-weight='700' fill='white'>{}</text></svg>",
+        urlencoding::encode(label)
+    )
 }
 
 async fn find_gitlab_user(client: &reqwest::Client, c: &GitLabContributor) -> Option<GitLabUser> {
