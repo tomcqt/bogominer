@@ -302,7 +302,7 @@ async function loadContributors() {
       .join('');
   } catch {
     $('contributors').innerHTML =
-      `<div class="contributors-empty">could not load contributors.</div>`;
+      `<div class="contributors-empty">could not load contributors: ${escapeHtml(String(err))}</div>`;
   }
 }
 

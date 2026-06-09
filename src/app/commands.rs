@@ -240,9 +240,14 @@ pub async fn get_contributors() -> Result<Vec<Contributor>, String> {
         return Ok(cached);
     }
 
-    let contributors = fetch_gitlab_contributors().await?;
-    write_contributors_cache(&contributors);
-    Ok(contributors)
+    match fetch_gitlab_contributors().await {
+        Ok(contributors) if !contributors.is_empty() => {
+            write_contributors_cache(&contributors);
+            Ok(contributors)
+        }
+        Ok(_) => read_stale_contributors_cache().ok_or_else(|| "no contributors found".into()),
+        Err(e) => read_stale_contributors_cache().ok_or(e),
+    }
 }
 
 #[tauri::command]
@@ -278,6 +283,12 @@ fn read_contributors_cache() -> Option<Vec<Contributor>> {
     serde_json::from_str(&data).ok()
 }
 
+fn read_stale_contributors_cache() -> Option<Vec<Contributor>> {
+    let path = contributors_cache_path()?;
+    let data = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&data).ok()
+}
+
 fn write_contributors_cache(contributors: &[Contributor]) {
     let Some(path) = contributors_cache_path() else {
         return;
@@ -308,12 +319,19 @@ struct GitLabUser {
     web_url: String,
 }
 
+struct GitLabMember {
+    name: String,
+    avatar_url: Option<String>,
+    web_url: String,
+}
+
 async fn fetch_gitlab_contributors() -> Result<Vec<Contributor>, String> {
     let client = reqwest::Client::new();
     let encoded = urlencoding::encode(GITLAB_PROJECT_PATH);
 
     let project: GitLabProject = client
         .get(format!("https://gitlab.com/api/v4/projects/{}", encoded))
+        .header("User-Agent", "Bogominer")
         .send()
         .await
         .map_err(|e| format!("gitlab project request failed: {}", e))?
@@ -323,12 +341,45 @@ async fn fetch_gitlab_contributors() -> Result<Vec<Contributor>, String> {
         .await
         .map_err(|e| format!("gitlab project parse failed: {}", e))?;
 
+    let members: Vec<GitLabMember> = client
+        .get(format!(
+            "https://gitlab.com/api/v4/projects/{}/members/all",
+            project.id
+        ))
+        .query(&[("per_page", "20")])
+        .header("User-Agent", "Bogominer")
+        .send()
+        .await
+        .map_err(|e| format!("gitlab members request failed: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("gitlab members error: {}", e))?
+        .json()
+        .await
+        .map_err(|e| format!("gitlab members parse failed: {}", e))?;
+
+    let from_members: Vec<Contributor> = members
+        .into_iter()
+        .filter_map(|m| {
+            let avatar_url = m.avatar_url?;
+            Some(Contributor {
+                name: m.name,
+                avatar_url,
+                web_url: m.web_url,
+            })
+        })
+        .collect();
+
+    if !from_members.is_empty() {
+        return Ok(from_members);
+    }
+
     let raw: Vec<GitLabContributor> = client
         .get(format!(
             "https://gitlab.com/api/v4/projects/{}/repository/contributors",
             project.id
         ))
         .query(&[("per_page", "20")])
+        .header("User-Agent", "Bogominer")
         .send()
         .await
         .map_err(|e| format!("gitlab contributors request failed: {}", e))?
@@ -363,6 +414,7 @@ async fn find_gitlab_user(client: &reqwest::Client, c: &GitLabContributor) -> Op
     let users: Vec<GitLabUser> = client
         .get("https://gitlab.com/api/v4/users")
         .query(&[("search", search)])
+        .header("User-Agent", "Bogominer")
         .send()
         .await
         .ok()?
