@@ -328,11 +328,14 @@ function wireEvents() {
   $('save-new').addEventListener('click', async () => {
     showError('new-error', '');
     try {
-      await invoke('save_new_account', {
+      console.log('[account:create] nickname =', $('new-nick').value);
+      appState = await invoke('save_new_account', {
         req: { nickname: $('new-nick').value },
       });
-      await refreshAppState();
+      console.log('[account:create] response =', appState);
+      updateAccountView();
     } catch (err) {
+      console.error('[account:create] failed', err);
       showError('new-error', String(err));
     }
   });
@@ -340,11 +343,14 @@ function wireEvents() {
   $('save-existing').addEventListener('click', async () => {
     showError('existing-error', '');
     try {
-      await invoke('save_existing_account', {
+      console.log('[account:login] code =', $('existing-code').value);
+      appState = await invoke('save_existing_account', {
         req: { recoveryCode: $('existing-code').value },
       });
-      await refreshAppState();
+      console.log('[account:login] response =', appState);
+      updateAccountView();
     } catch (err) {
+      console.error('[account:login] failed', err);
       showError('existing-error', String(err));
     }
   });

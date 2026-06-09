@@ -1,5 +1,5 @@
 use super::state::{AccountView, AppState, Contributor, RuntimeStats};
-use crate::backend::{api, pool::Pool};
+use crate::backend::{api, config::Config, pool::Pool};
 use crate::misc::validate_nick;
 use serde::Deserialize;
 use std::{
@@ -34,34 +34,60 @@ pub struct ExistingAccountRequest {
     pub recovery_code: String,
 }
 
-#[tauri::command]
-pub fn get_app_state(state: State<AppState>) -> AppView {
-    let config = state.config.lock();
+fn app_view_from_config(config: &Config) -> AppView {
     AppView {
         account: AccountView {
             uuid: config.uuid.clone(),
             nickname: config.nickname.clone(),
             has_recovery_code: config.recovery_code.as_ref().is_some_and(|s| !s.is_empty()),
+            ready: config.has_credentials(),
         },
         version: env!("CARGO_PKG_VERSION").to_string(),
     }
 }
 
 #[tauri::command]
+pub fn get_app_state(state: State<AppState>) -> AppView {
+    let config = state.config.lock();
+    app_view_from_config(&config)
+}
+
+#[tauri::command]
 pub fn save_new_account(req: NewAccountRequest, state: State<AppState>) -> Result<AppView, String> {
     let nick = validate_nick(&req.nickname)?;
-    let info = state
-        .rt
-        .block_on(api::create_account(&nick))
-        .map_err(|e| e)?;
+    eprintln!("[account:create] nick={}", nick);
+    let info = state.rt.block_on(api::create_account(&nick)).map_err(|e| {
+        eprintln!("[account:create] error={}", e);
+        e
+    })?;
+    eprintln!(
+        "[account:create] api ok uuid={} nickname={} code_present={}",
+        info.uuid,
+        info.nickname,
+        !info.code.is_empty()
+    );
+
+    if info.code.trim().is_empty() {
+        return Err("server created account but did not return a recovery code".into());
+    }
+
     {
         let mut config = state.config.lock();
         config.uuid = Some(info.uuid);
         config.nickname = Some(info.nickname);
         config.recovery_code = Some(info.code);
         config.save();
+
+        let view = app_view_from_config(&config);
+        eprintln!(
+            "[account:create] returning ready={} uuid_present={} nick_present={} code_present={}",
+            view.account.ready,
+            view.account.uuid.is_some(),
+            view.account.nickname.is_some(),
+            view.account.has_recovery_code,
+        );
+        return Ok(view);
     }
-    Ok(get_app_state(state))
 }
 
 #[tauri::command]
@@ -75,19 +101,49 @@ pub fn save_existing_account(
         return Err("recovery code is required".into());
     }
 
+    eprintln!("[account:login] code={}", recovery_code);
     let info = state
         .rt
         .block_on(api::login_with_code(&recovery_code))
-        .map_err(|e| e)?;
+        .map_err(|e| {
+            eprintln!("[account:login] error={}", e);
+            e
+        })?;
+    eprintln!(
+        "[account:login] ok uuid={} nickname={}",
+        info.uuid, info.nickname
+    );
+
+    let code_to_save = if info.code.trim().is_empty() {
+        recovery_code
+    } else {
+        info.code
+    };
+
+    eprintln!(
+        "[account:login] api ok uuid={} nickname={} code_present={}",
+        info.uuid,
+        info.nickname,
+        !code_to_save.is_empty()
+    );
 
     {
         let mut config = state.config.lock();
         config.uuid = Some(info.uuid);
         config.nickname = Some(info.nickname);
-        config.recovery_code = Some(recovery_code);
+        config.recovery_code = Some(code_to_save);
         config.save();
+
+        let view = app_view_from_config(&config);
+        eprintln!(
+            "[account:login] returning ready={} uuid_present={} nick_present={} code_present={}",
+            view.account.ready,
+            view.account.uuid.is_some(),
+            view.account.nickname.is_some(),
+            view.account.has_recovery_code
+        );
+        return Ok(view);
     }
-    Ok(get_app_state(state))
 }
 
 #[tauri::command]

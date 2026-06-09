@@ -26,6 +26,7 @@ pub struct AccountView {
     pub uuid: Option<String>,
     pub nickname: Option<String>,
     pub has_recovery_code: bool,
+    pub ready: bool,
 }
 
 #[derive(Debug, serde::Serialize)]
