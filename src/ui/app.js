@@ -369,12 +369,13 @@ function wireEvents() {
   });
 
   $('switch-account').addEventListener('click', async () => {
-    await invoke('stop_mining');
-    localStorage.removeItem('bogominer_account_warning_seen');
-    await invoke('save_existing_account', { req: { recoveryCode: '' } }).catch(
-      () => {},
-    );
-    location.reload();
+    appState = await invoke('clear_account');
+    $('new-nick').value = '';
+    $('existing-code').value = '';
+    showError('new-error', '');
+    showError('existing-error', '');
+    updateAccountView();
+    await refreshStats();
   });
 
   $('settings-btn').addEventListener('click', () => {

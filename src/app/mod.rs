@@ -8,6 +8,7 @@ pub fn run() {
             commands::get_app_state,
             commands::save_new_account,
             commands::save_existing_account,
+            commands::clear_account,
             commands::start_mining,
             commands::stop_mining,
             commands::set_cpu_target,

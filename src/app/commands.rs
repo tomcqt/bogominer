@@ -91,6 +91,20 @@ pub fn save_existing_account(
 }
 
 #[tauri::command]
+pub fn clear_account(state: State<AppState>) -> AppView {
+    if let Some(pool) = state.pool.lock().as_mut() {
+        pool.stop();
+    }
+
+    {
+        let mut config = state.config.lock();
+        config.clear();
+    }
+
+    get_app_state(state)
+}
+
+#[tauri::command]
 pub fn start_mining(cpu_target: f64, state: State<AppState>) -> Result<(), String> {
     let config = state.config.lock().clone();
     let uuid = config.uuid.ok_or("missing uuid")?;

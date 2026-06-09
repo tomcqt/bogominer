@@ -40,7 +40,7 @@ impl Config {
         let _ = fs::write(&path, data);
     }
 
-    pub fn _clear(&mut self) {
+    pub fn clear(&mut self) {
         self.uuid = None;
         self.recovery_code = None;
         self.nickname = None;
