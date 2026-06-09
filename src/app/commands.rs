@@ -194,6 +194,17 @@ pub async fn get_leaderboard() -> Result<Vec<crate::backend::api::LeaderboardEnt
     crate::backend::api::get_leaderboard(20).await
 }
 
+#[tauri::command]
+pub fn open_external(url: String, app: tauri::AppHandle) -> Result<(), String> {
+    if !(url.starts_with("https://gitlab.com/") || url.starts_with("https://www.gitlab.com/")) {
+        return Err("only gitlab links can be opened from here".into());
+    }
+
+    tauri_plugin_opener::OpenerExt::opener(&app)
+        .open_url(url, None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 // contributor helper functions
 fn contributors_cache_path() -> Option<PathBuf> {
     directories::ProjectDirs::from("sh", "tomcat", "bogominer")

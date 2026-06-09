@@ -3,6 +3,7 @@ mod state;
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .manage(state::AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::get_app_state,
@@ -15,6 +16,7 @@ pub fn run() {
             commands::get_runtime_stats,
             commands::get_contributors,
             commands::get_leaderboard,
+            commands::open_external,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run tauri app");

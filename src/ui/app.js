@@ -293,9 +293,9 @@ async function loadContributors() {
     root.innerHTML = contributors
       .map(
         (c) => `
-      <a class="contributor" href="${escapeHtml(c.webUrl)}" title="${escapeHtml(c.name)}">
+      <button class="contributor" data-url="${escapeHtml(c.webUrl)}" title="${escapeHtml(c.name)}">
         <img src="${escapeHtml(c.avatarUrl)}" alt="${escapeHtml(c.name)}" />
-      </a>
+      </button>
     `,
       )
       .join('');
@@ -386,6 +386,14 @@ function wireEvents() {
   $('settings-close').addEventListener('click', closeSettings);
   $('settings-modal').addEventListener('click', (e) => {
     if (e.target.id === 'settings-modal') closeSettings();
+  });
+
+  $('contributors').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.contributor');
+    if (!btn) return;
+    const url = btn.dataset.url;
+    if (!url) return;
+    await invoke('open_external', { url }).catch(() => {});
   });
 }
 

@@ -21,6 +21,7 @@ num_cpus = "1"
 parking_lot = "0.12"
 tauri = { version = "2", features = [] }
 urlencoding = "2"
+tauri-plugin-opener = "2"
 
 [profile.release]
 opt-level = 3
