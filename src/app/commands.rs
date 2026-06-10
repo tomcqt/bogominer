@@ -194,6 +194,7 @@ pub fn set_cpu_target(cpu_target: f64, state: State<AppState>) -> Result<(), Str
         .as_deref()
         .ok_or("missing recovery code")?;
 
+    let _guard = state.rt.enter();
     if let Some(pool) = state.pool.lock().as_mut() {
         pool.set_cpu_target(cpu_target.clamp(0.05, 1.0), uuid, nickname, code);
     }
