@@ -170,6 +170,7 @@ pub fn start_mining(cpu_target: f64, state: State<AppState>) -> Result<(), Strin
     let code = config.recovery_code.unwrap_or_default();
 
     let mut pool = state.pool.lock();
+    eprintln!("[cmd] start_mining cpu_target={}", cpu_target);
     *pool = Some(Pool::new(state.stats.clone()));
 
     let _guard = state.rt.enter();
@@ -181,6 +182,7 @@ pub fn start_mining(cpu_target: f64, state: State<AppState>) -> Result<(), Strin
 
 #[tauri::command]
 pub fn stop_mining(state: State<AppState>) {
+    eprintln!("[cmd] stop_mining");
     let mut pool = state.pool.lock();
     if let Some(pool) = pool.as_mut() {
         pool.stop();
@@ -190,6 +192,7 @@ pub fn stop_mining(state: State<AppState>) {
 
 #[tauri::command]
 pub fn set_cpu_target(cpu_target: f64, state: State<AppState>) -> Result<(), String> {
+    eprintln!("[cmd] set_cpu_target={}", cpu_target);
     let config = state.config.lock().clone();
     let uuid = config.uuid.as_deref().ok_or("missing uuid")?;
     let nickname = config.nickname.as_deref().ok_or("missing nickname")?;

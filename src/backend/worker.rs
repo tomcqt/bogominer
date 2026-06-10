@@ -96,6 +96,7 @@ pub fn spawn_worker(
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
     let stats_inner = stats.clone();
+    eprintln!("[pool] spawning worker");
     tokio::spawn(async move {
         let result: Result<(), String> = run_worker(
             uuid,
@@ -109,7 +110,10 @@ pub fn spawn_worker(
         .await;
         stats_inner.active_workers.fetch_sub(1, Ordering::Relaxed);
         if let Err(e) = result {
+            eprintln!("[worker] exited with error: {}", e);
             let _ = on_error.send(e);
+        } else {
+            eprintln!("[worker] exited cleanly");
         }
     });
 
@@ -126,6 +130,7 @@ async fn run_worker(
     mut cmd_rx: mpsc::UnboundedReceiver<WorkerCmd>,
     on_code: mpsc::UnboundedSender<String>,
 ) -> Result<(), String> {
+    eprintln!("[worker] connecting to {}", WS_URL);
     let (ws_stream, _) = connect_async(WS_URL)
         .await
         .map_err(|e| format!("ws connect failed: {}", e))?;
@@ -135,7 +140,10 @@ async fn run_worker(
 
     let hello = HelloMsg::new(&uuid, &nickname, &code);
     let hello_json = serde_json::to_string(&hello).unwrap();
-    eprintln!("[worker] sending hello");
+    eprintln!(
+        "[worker] sending hello (uuid={:?}, nick={:?})",
+        uuid, nickname
+    );
     ws_tx
         .send(Message::Text(hello_json.into()))
         .await
@@ -152,6 +160,7 @@ async fn run_worker(
         let target = f64::from_bits(cpu_target.load(Ordering::Relaxed));
         ((target * cores as f64).ceil() as usize).max(1).min(cores)
     };
+    eprintln!("[worker] spawning {} solver threads", num_threads);
 
     let solver_handles = spawn_solvers(
         num_threads,
@@ -182,13 +191,16 @@ async fn run_worker(
                 let Message::Text(text) = msg else { continue };
                 let server_msg: ServerMsg = match serde_json::from_str(&text) {
                     Ok(m) => m,
-                    Err(_) => continue,
+                    Err(e) => {
+                        eprintln!("[worker] failed to parse server msg: {} raw={}", e, &text[..text.len().min(200)]);
+                        continue;
+                    }
                 };
 
                 match server_msg.msg_type.as_str() {
                     "welcome" => {
                         welcomed = true;
-                        eprintln!("[worker] got welcome");
+                        eprintln!("[worker] got welcome (lifetime={:?}, atb={:?})", server_msg.lifetime_shuffles, server_msg.all_time_best);
                         if let Some(lifetime) = server_msg.lifetime_shuffles {
                             stats.lifetime_shuffles.store(lifetime, Ordering::Relaxed);
                         }
@@ -208,6 +220,7 @@ async fn run_worker(
                             None => continue,
                         };
                         let count = server_msg.count.unwrap_or(0);
+                        eprintln!("[worker] job received seed={} count={}", seed_str, count);
                         let new_lease = Arc::new(LeaseState::new(seed_str, count));
 
                         if let Some(old) = lease.lock().take() {
@@ -220,6 +233,7 @@ async fn run_worker(
                         stats.lease_cursor.store(0, Ordering::Relaxed);
                     }
                     "credited" => {
+                        eprintln!("[worker] credited: credit={:?} lifetime={:?} rate={:?} best={:?}", server_msg.credit, server_msg.lifetime_shuffles, server_msg.rate, server_msg.batch_best);
                         if let Some(credit) = server_msg.credit {
                             stats.session_shuffles.fetch_add(credit, Ordering::Relaxed);
                         }
@@ -253,7 +267,7 @@ async fn run_worker(
                         eprintln!("[worker] rejected: {}", reason);
                     }
                     "client_outdated" => {
-                        eprintln!("[worker] client_outdated! received");
+                        eprintln!("[worker] client_outdated");
                         return Err("client outdated! make an issue in the github".into());
                     }
                     "banned" => {
@@ -279,6 +293,7 @@ async fn run_worker(
                     stats.lease_cursor.store(total, Ordering::Relaxed);
 
                     if total > last_reported_total && best_correct >= 0 {
+                        eprintln!("[worker] reporting total_done={} best_correct={} best_index={}", total, best_correct, best_index);
                         let msg = ResultMsg::new(
                             &l.seed_str,
                             total,
@@ -298,17 +313,21 @@ async fn run_worker(
             Some(cmd) = cmd_rx.recv() => {
                 match cmd{
                     WorkerCmd::SetCpuTarget(t) => {
+                        eprintln!("[worker] cpu target changed to {}", t);
                         cpu_target.store(t.to_bits(), Ordering::Relaxed);
                     }
                     WorkerCmd::Stop => {
+                        eprintln!("[worker] stop command received, shutting down");
                         let _ = stop_tx.send(true);
                         let stop = StopMsg::new();
                         let json = serde_json::to_string(&stop).unwrap();
                         let _ = ws_tx.send(Message::Text(json.into())).await;
                         let _ = ws_tx.close().await;
+                        eprintln!("[worker] waiting for {} solver threads to exit", solver_handles.len());
                         for h in solver_handles {
                             let _ = h.join();
                         }
+                        eprintln!("[worker] all solver threads exited");
                         stats.solver_threads.store(0, Ordering::Relaxed);
                         return Ok(());
                     }

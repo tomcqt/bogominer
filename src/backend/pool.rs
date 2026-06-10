@@ -29,6 +29,10 @@ impl Pool {
     }
 
     pub fn start(&mut self, uuid: &str, nickname: &str, code: &str, cpu_target: f64) {
+        eprintln!(
+            "[pool] start (uuid={:?}, nick={:?}, cpu={})",
+            uuid, nickname, cpu_target
+        );
         self.stop();
         self.stats.reset_session();
 
@@ -45,12 +49,15 @@ impl Pool {
     }
 
     pub fn stop(&mut self) {
+        eprintln!("[pool] stop requested");
         if let Some(w) = self.worker.take() {
             let _ = w.send(WorkerCmd::Stop);
+            eprintln!("[pool] sent stop to worker, sleeping 500ms for clean shutdown");
         }
         std::thread::sleep(Duration::from_millis(500));
         self.stats.active_workers.store(0, Ordering::Relaxed);
         self.stats.solver_threads.store(0, Ordering::Relaxed);
+        eprintln!("[pool] stop complete");
     }
 
     pub fn set_cpu_target(&mut self, cpu_target: f64, uuid: &str, nickname: &str, code: &str) {
@@ -60,7 +67,12 @@ impl Pool {
             .max(1)
             .min(cores);
 
+        eprintln!(
+            "[pool] set_cpu_target={} old_threads={} new_threads={}",
+            cpu_target, old_threads, new_threads
+        );
         if old_threads != new_threads && self.worker.is_some() {
+            eprintln!("[pool] thread count changed, rebuilding");
             self.stop();
             self.start(uuid, nickname, code, cpu_target);
         } else if let Some(w) = &self.worker {
