@@ -15,7 +15,7 @@ pub struct Config {
     pub nickname: Option<String>,
 }
 
-fn config_path() -> Option<PathBuf> {
+pub fn config_path() -> Option<PathBuf> {
     ProjectDirs::from("sh", "tomcat", "bogominer").map(|dirs| dirs.config_dir().join("config.json"))
 }
 
