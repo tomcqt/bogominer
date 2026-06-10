@@ -50,7 +50,6 @@ struct LoginPayload<'a> {
 
 pub async fn create_account(nickname: &str) -> Result<AccountInfo, String> {
     let client = reqwest::Client::new();
-    eprintln!("[api] create_account nickname={}", nickname);
     let resp = client
         .post(format!("{}/account/create", API_URL))
         .json(&CreatePayload { nickname })
@@ -69,8 +68,6 @@ pub async fn create_account(nickname: &str) -> Result<AccountInfo, String> {
     if !resp.status().is_success() {
         return Err(format!("server error: {}", resp.status()));
     }
-
-    eprintln!("[api] create_account success");
     resp.json::<AccountInfo>()
         .await
         .map_err(|e| format!("parse error: {}", e))
@@ -78,11 +75,6 @@ pub async fn create_account(nickname: &str) -> Result<AccountInfo, String> {
 
 pub async fn login_with_code(code: &str) -> Result<AccountInfo, String> {
     let client = reqwest::Client::new();
-    eprintln!(
-        "[api] login_with_code code={}...{}",
-        &code[..4.min(code.len())],
-        &code[code.len().saturating_sub(4)..]
-    );
     let resp = client
         .post(format!("{}/api/account/login", BASE_URL))
         .json(&LoginPayload { code })
@@ -96,8 +88,6 @@ pub async fn login_with_code(code: &str) -> Result<AccountInfo, String> {
     if !resp.status().is_success() {
         return Err(format!("server error: {}", resp.status()));
     }
-
-    eprintln!("[api] login_with_code success");
     resp.json::<AccountInfo>()
         .await
         .map_err(|e| format!("parse error: {}", e))
