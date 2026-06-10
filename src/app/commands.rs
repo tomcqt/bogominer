@@ -146,8 +146,12 @@ pub fn save_existing_account(
 
 #[tauri::command]
 pub fn clear_account(state: State<AppState>) -> AppView {
-    if let Some(pool) = state.pool.lock().as_mut() {
-        pool.stop();
+    {
+        let mut pool = state.pool.lock();
+        if let Some(p) = pool.as_mut() {
+            p.stop();
+        }
+        *pool = None;
     }
 
     {
@@ -166,9 +170,8 @@ pub fn start_mining(cpu_target: f64, state: State<AppState>) -> Result<(), Strin
     let code = config.recovery_code.unwrap_or_default();
 
     let mut pool = state.pool.lock();
-    if pool.is_none() {
-        *pool = Some(Pool::new(state.stats.clone()));
-    }
+    eprintln!("[cmd] start_mining cpu_target={}", cpu_target);
+    *pool = Some(Pool::new(state.stats.clone()));
 
     let _guard = state.rt.enter();
     pool.as_mut()
@@ -179,13 +182,17 @@ pub fn start_mining(cpu_target: f64, state: State<AppState>) -> Result<(), Strin
 
 #[tauri::command]
 pub fn stop_mining(state: State<AppState>) {
-    if let Some(pool) = state.pool.lock().as_mut() {
+    eprintln!("[cmd] stop_mining");
+    let mut pool = state.pool.lock();
+    if let Some(pool) = pool.as_mut() {
         pool.stop();
     }
+    *pool = None;
 }
 
 #[tauri::command]
 pub fn set_cpu_target(cpu_target: f64, state: State<AppState>) -> Result<(), String> {
+    eprintln!("[cmd] set_cpu_target={}", cpu_target);
     let config = state.config.lock().clone();
     let uuid = config.uuid.as_deref().ok_or("missing uuid")?;
     let nickname = config.nickname.as_deref().ok_or("missing nickname")?;
@@ -194,8 +201,15 @@ pub fn set_cpu_target(cpu_target: f64, state: State<AppState>) -> Result<(), Str
         .as_deref()
         .ok_or("missing recovery code")?;
 
-    if let Some(pool) = state.pool.lock().as_mut() {
-        pool.set_cpu_target(cpu_target.clamp(0.05, 1.0), uuid, nickname, code);
+    let _guard = state.rt.enter();
+    let mut pool = state.pool.lock();
+    match pool.as_mut() {
+        Some(p) => {
+            p.set_cpu_target(cpu_target.clamp(0.05, 1.0), uuid, nickname, code);
+        }
+        None => {
+            return Err("not running".into());
+        }
     }
     Ok(())
 }
