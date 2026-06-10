@@ -173,12 +173,9 @@ pub fn start_mining(cpu_target: f64, state: State<AppState>) -> Result<(), Strin
     *pool = Some(Pool::new(state.stats.clone()));
 
     let _guard = state.rt.enter();
-    pool.as_mut().unwrap().start(
-        Some(uuid),
-        Some(nickname),
-        code,
-        cpu_target.clamp(0.05, 1.0),
-    );
+    pool.as_mut()
+        .unwrap()
+        .start(&uuid, &nickname, &code, cpu_target.clamp(0.05, 1.0));
     Ok(())
 }
 
