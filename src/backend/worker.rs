@@ -375,7 +375,8 @@ fn spawn_solvers(
             };
 
             let t0 = Instant::now();
-            let result = solver::run_range(l.seed, lo, hi);
+            let threshold = l.best_correct.load(Ordering::Relaxed);
+            let result = solver::run_range_with_threshold(l.seed, lo, hi, threshold);
             let work_ms = t0.elapsed().as_secs_f64() * 1000.0;
 
             if result.best_correct >= 0 {
