@@ -308,7 +308,8 @@ struct GithubContributor {
 
 async fn fetch_github_contributors() -> Result<Vec<Contributor>, String> {
     let client = reqwest::Client::new();
-    let raw: Vec<GithubContributor> = client
+
+    let resp = client
         .get(format!(
             "https://api.github.com/repos/{}/contributors",
             GITHUB_REPO
@@ -318,12 +319,27 @@ async fn fetch_github_contributors() -> Result<Vec<Contributor>, String> {
         .header("Accept", "application/vnd.github+json")
         .send()
         .await
-        .map_err(|e| format!("github contributors request failed: {}", e))?
-        .error_for_status()
-        .map_err(|e| format!("github contributors error: {}", e))?
-        .json()
+        .map_err(|e| format!("github request failed: {}", e))?;
+
+    let status = resp.status();
+    let body = resp
+        .text()
         .await
-        .map_err(|e| format!("github contributors parse failed: {}", e))?;
+        .map_err(|e| format!("body error: {}", e))?;
+    eprintln!(
+        "[github] status={} body={}",
+        status,
+        &body[..body.len().min(500)]
+    );
+
+    if !status.is_success() {
+        return Err(format!("github error: {} {}", status, body));
+    }
+
+    let raw: Vec<GithubContributor> =
+        serde_json::from_str(&body).map_err(|e| format!("github parse failed: {}", e))?;
+
+    eprintln!("[github] found {} contributors", raw.len());
 
     Ok(raw
         .into_iter()
