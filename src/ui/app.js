@@ -295,7 +295,8 @@ async function loadContributors() {
       .map(
         (c) => `
       <button class="contributor" data-url="${escapeHtml(c.webUrl)}" title="${escapeHtml(c.name)}">
-        <img src="${escapeHtml(c.avatarUrl)}" alt="${escapeHtml(c.name)}" />
+        <img src="${escapeHtml(c.avatarUrl)}" />
+        <span class="contributor-tip">${escapeHtml(c.name)}</span>
       </button>
     `,
       )
