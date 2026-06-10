@@ -146,11 +146,13 @@ pub fn save_existing_account(
 
 #[tauri::command]
 pub fn clear_account(state: State<AppState>) -> AppView {
-    let mut pool = state.pool.lock();
-    if let Some(pool) = pool.as_mut() {
-        pool.stop();
+    {
+        let mut pool = state.pool.lock();
+        if let Some(p) = pool.as_mut() {
+            p.stop();
+        }
+        *pool = None;
     }
-    *pool = None;
 
     {
         let mut config = state.config.lock();
@@ -171,9 +173,12 @@ pub fn start_mining(cpu_target: f64, state: State<AppState>) -> Result<(), Strin
     *pool = Some(Pool::new(state.stats.clone()));
 
     let _guard = state.rt.enter();
-    pool.as_mut()
-        .unwrap()
-        .start_saved(&uuid, &nickname, code, cpu_target.clamp(0.05, 1.0));
+    pool.as_mut().unwrap().start(
+        Some(uuid),
+        Some(nickname),
+        code,
+        cpu_target.clamp(0.05, 1.0),
+    );
     Ok(())
 }
 
