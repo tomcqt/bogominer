@@ -1,5 +1,5 @@
 use super::state::{AccountView, AppState, Contributor, RuntimeStats};
-use crate::backend::{api, config::Config, pool::Pool};
+use crate::backend::{api, config::Config, gpu, gpu::GpuWorker, pool::Pool};
 use crate::misc::validate_nick;
 use serde::Deserialize;
 use std::{
@@ -146,13 +146,7 @@ pub fn save_existing_account(
 
 #[tauri::command]
 pub fn clear_account(state: State<AppState>) -> AppView {
-    {
-        let mut pool = state.pool.lock();
-        if let Some(p) = pool.as_mut() {
-            p.stop();
-        }
-        *pool = None;
-    }
+    stop_all(&state);
 
     {
         let mut config = state.config.lock();
@@ -162,37 +156,74 @@ pub fn clear_account(state: State<AppState>) -> AppView {
     get_app_state(state)
 }
 
+fn stop_all(state: &AppState) {
+    {
+        let mut pool = state.pool.lock();
+        if let Some(p) = pool.as_mut() {
+            p.stop();
+        }
+        *pool = None;
+    }
+    {
+        let mut gpu = state.gpu.lock();
+        if let Some(g) = gpu.as_mut() {
+            g.stop();
+        }
+        *gpu = None;
+    }
+}
+
+fn do_start_mining(state: &AppState, cpu_target: f64) -> Result<(), String> {
+    let config = state.config.lock().clone();
+    let uuid = config.uuid.clone().ok_or("missing uuid")?;
+    let nickname = config.nickname.clone().ok_or("missing nickname")?;
+    let code = config.recovery_code.clone().unwrap_or_default();
+
+    // one connection per account: never run cpu and gpu at the same time
+    stop_all(state);
+    *state.last_cpu_target.lock() = cpu_target;
+
+    if config.gpu_enabled {
+        eprintln!("[cmd] start_mining (gpu backend)");
+        if code.is_empty() {
+            return Err("gpu mining needs your recovery code — it is still pending".into());
+        }
+        let path = gpu::find_worker(&config).ok_or_else(|| {
+            format!(
+                "{} not found — set its path in settings or place it next to bogominer",
+                gpu::WORKER_EXE
+            )
+        })?;
+        let worker = GpuWorker::spawn(&path, &uuid, &nickname, &code, state.stats.clone())?;
+        *state.gpu.lock() = Some(worker);
+    } else {
+        eprintln!("[cmd] start_mining (cpu backend) cpu_target={}", cpu_target);
+        let mut pool = state.pool.lock();
+        *pool = Some(Pool::new(state.stats.clone()));
+
+        let _guard = state.rt.enter();
+        pool.as_mut()
+            .unwrap()
+            .start(&uuid, &nickname, &code, cpu_target.clamp(0.05, 1.0));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn start_mining(cpu_target: f64, state: State<AppState>) -> Result<(), String> {
-    let config = state.config.lock().clone();
-    let uuid = config.uuid.ok_or("missing uuid")?;
-    let nickname = config.nickname.ok_or("missing nickname")?;
-    let code = config.recovery_code.unwrap_or_default();
-
-    let mut pool = state.pool.lock();
-    eprintln!("[cmd] start_mining cpu_target={}", cpu_target);
-    *pool = Some(Pool::new(state.stats.clone()));
-
-    let _guard = state.rt.enter();
-    pool.as_mut()
-        .unwrap()
-        .start(&uuid, &nickname, &code, cpu_target.clamp(0.05, 1.0));
-    Ok(())
+    do_start_mining(&state, cpu_target)
 }
 
 #[tauri::command]
 pub fn stop_mining(state: State<AppState>) {
     eprintln!("[cmd] stop_mining");
-    let mut pool = state.pool.lock();
-    if let Some(pool) = pool.as_mut() {
-        pool.stop();
-    }
-    *pool = None;
+    stop_all(&state);
 }
 
 #[tauri::command]
 pub fn set_cpu_target(cpu_target: f64, state: State<AppState>) -> Result<(), String> {
     eprintln!("[cmd] set_cpu_target={}", cpu_target);
+    *state.last_cpu_target.lock() = cpu_target;
     let config = state.config.lock().clone();
     let uuid = config.uuid.as_deref().ok_or("missing uuid")?;
     let nickname = config.nickname.as_deref().ok_or("missing nickname")?;
@@ -224,14 +255,30 @@ pub fn get_runtime_stats(state: State<AppState>) -> RuntimeStats {
         }
     }
 
-    let running = state
+    let pool_running = state
         .pool
         .lock()
         .as_ref()
         .is_some_and(|pool| pool.is_running());
 
+    let (gpu_present, gpu_running, gpu_status) = {
+        let mut gpu = state.gpu.lock();
+        match gpu.as_mut() {
+            Some(g) => (true, g.is_running(), g.status_line()),
+            None => (false, false, String::new()),
+        }
+    };
+
+    let backend = if gpu_present {
+        "gpu"
+    } else if state.pool.lock().is_some() {
+        "cpu"
+    } else {
+        "none"
+    };
+
     RuntimeStats {
-        running,
+        running: pool_running || gpu_running,
         session_shuffles: state.stats.session_shuffles.load(Ordering::Relaxed),
         lifetime_shuffles: state.stats.lifetime_shuffles.load(Ordering::Relaxed),
         rate: state.stats.rate.load(Ordering::Relaxed),
@@ -243,7 +290,92 @@ pub fn get_runtime_stats(state: State<AppState>) -> RuntimeStats {
         lease_cursor: state.stats.lease_cursor.load(Ordering::Relaxed),
         lease_count: state.stats.lease_count.load(Ordering::Relaxed),
         last5: state.stats.get_last5(),
+        backend: backend.to_string(),
+        gpu_status,
     }
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuSettings {
+    pub enabled: bool,
+    pub configured_path: Option<String>,
+    pub resolved_path: Option<String>,
+    pub available: bool,
+}
+
+fn gpu_settings_from_config(config: &Config) -> GpuSettings {
+    let resolved = gpu::find_worker(config);
+    GpuSettings {
+        enabled: config.gpu_enabled,
+        configured_path: config.gpu_worker_path.clone(),
+        resolved_path: resolved.as_ref().map(|p| p.display().to_string()),
+        available: resolved.is_some(),
+    }
+}
+
+#[tauri::command]
+pub fn get_gpu_settings(state: State<AppState>) -> GpuSettings {
+    let config = state.config.lock();
+    gpu_settings_from_config(&config)
+}
+
+#[tauri::command]
+pub async fn download_gpu_worker(state: State<'_, AppState>) -> Result<GpuSettings, String> {
+    let path = gpu::download_worker().await?;
+    eprintln!("[cmd] gpu worker ready at {:?}", path);
+    let config = state.config.lock();
+    Ok(gpu_settings_from_config(&config))
+}
+
+#[tauri::command]
+pub fn set_gpu_enabled(enabled: bool, state: State<AppState>) -> Result<GpuSettings, String> {
+    eprintln!("[cmd] set_gpu_enabled={}", enabled);
+    let settings = {
+        let mut config = state.config.lock();
+        if enabled && gpu::find_worker(&config).is_none() {
+            return Err(format!(
+                "{} not found — set its path below or place it next to bogominer",
+                gpu::WORKER_EXE
+            ));
+        }
+        config.gpu_enabled = enabled;
+        config.save();
+        gpu_settings_from_config(&config)
+    };
+
+    // hot-swap the backend if mining is currently running
+    let was_running = state
+        .pool
+        .lock()
+        .as_ref()
+        .is_some_and(|pool| pool.is_running())
+        || state.gpu.lock().as_mut().is_some_and(|g| g.is_running());
+    if was_running {
+        let cpu_target = *state.last_cpu_target.lock();
+        do_start_mining(&state, cpu_target)?;
+    }
+
+    Ok(settings)
+}
+
+#[tauri::command]
+pub fn set_gpu_worker_path(path: String, state: State<AppState>) -> Result<GpuSettings, String> {
+    let trimmed = path.trim().to_string();
+    eprintln!("[cmd] set_gpu_worker_path={:?}", trimmed);
+
+    if !trimmed.is_empty() && !PathBuf::from(&trimmed).is_file() {
+        return Err("no file at that path".into());
+    }
+
+    let mut config = state.config.lock();
+    config.gpu_worker_path = if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    };
+    config.save();
+    Ok(gpu_settings_from_config(&config))
 }
 
 #[tauri::command]

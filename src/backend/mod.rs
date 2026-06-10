@@ -1,5 +1,6 @@
 pub mod api;
 pub mod config;
+pub mod gpu;
 pub mod pool;
 pub mod protocol;
 pub mod rng;

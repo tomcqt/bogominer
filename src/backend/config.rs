@@ -13,6 +13,12 @@ pub struct Config {
 
     #[serde(default)]
     pub nickname: Option<String>,
+
+    #[serde(default)]
+    pub gpu_enabled: bool,
+
+    #[serde(default)]
+    pub gpu_worker_path: Option<String>,
 }
 
 pub fn config_path() -> Option<PathBuf> {
