@@ -146,9 +146,11 @@ pub fn save_existing_account(
 
 #[tauri::command]
 pub fn clear_account(state: State<AppState>) -> AppView {
-    if let Some(pool) = state.pool.lock().as_mut() {
+    let mut pool = state.pool.lock();
+    if let Some(pool) = pool.as_mut() {
         pool.stop();
     }
+    *pool = None;
 
     {
         let mut config = state.config.lock();
@@ -166,22 +168,22 @@ pub fn start_mining(cpu_target: f64, state: State<AppState>) -> Result<(), Strin
     let code = config.recovery_code.unwrap_or_default();
 
     let mut pool = state.pool.lock();
-    if pool.is_none() {
-        *pool = Some(Pool::new(state.stats.clone()));
-    }
+    *pool = Some(Pool::new(state.stats.clone()));
 
     let _guard = state.rt.enter();
     pool.as_mut()
         .unwrap()
-        .start(&uuid, &nickname, &code, cpu_target.clamp(0.05, 1.0));
+        .start_saved(&uuid, &nickname, code, cpu_target.clamp(0.05, 1.0));
     Ok(())
 }
 
 #[tauri::command]
 pub fn stop_mining(state: State<AppState>) {
-    if let Some(pool) = state.pool.lock().as_mut() {
+    let mut pool = state.pool.lock();
+    if let Some(pool) = pool.as_mut() {
         pool.stop();
     }
+    *pool = None;
 }
 
 #[tauri::command]
@@ -195,8 +197,14 @@ pub fn set_cpu_target(cpu_target: f64, state: State<AppState>) -> Result<(), Str
         .ok_or("missing recovery code")?;
 
     let _guard = state.rt.enter();
-    if let Some(pool) = state.pool.lock().as_mut() {
-        pool.set_cpu_target(cpu_target.clamp(0.05, 1.0), uuid, nickname, code);
+    let mut pool = state.pool.lock();
+    match pool.as_mut() {
+        Some(p) => {
+            p.set_cpu_target(cpu_target.clamp(0.05, 1.0), uuid, nickname, code);
+        }
+        None => {
+            return Err("not running".into());
+        }
     }
     Ok(())
 }
