@@ -2,6 +2,7 @@ use crate::backend::stats::Stats;
 use crate::backend::worker::{self, WorkerCmd};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 pub struct Pool {
@@ -47,6 +48,7 @@ impl Pool {
         if let Some(w) = self.worker.take() {
             let _ = w.send(WorkerCmd::Stop);
         }
+        std::thread::sleep(Duration::from_millis(500));
         self.stats.active_workers.store(0, Ordering::Relaxed);
         self.stats.solver_threads.store(0, Ordering::Relaxed);
     }

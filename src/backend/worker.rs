@@ -130,10 +130,12 @@ async fn run_worker(
         .await
         .map_err(|e| format!("ws connect failed: {}", e))?;
 
+    eprintln!("[worker] connected to {}", WS_URL);
     let (mut ws_tx, mut ws_rx) = ws_stream.split();
 
     let hello = HelloMsg::new(&uuid, &nickname, &code);
     let hello_json = serde_json::to_string(&hello).unwrap();
+    eprintln!("[worker] sending hello");
     ws_tx
         .send(Message::Text(hello_json.into()))
         .await
@@ -172,6 +174,7 @@ async fn run_worker(
         tokio::select! {
             ws_msg = ws_rx.next() => {
                 let Some(msg) = ws_msg else {
+                    eprintln!("[worker] ws closed by server");
                     return Err("server closed connection".into());
                 };
                 let msg = msg.map_err(|e| format!("ws error: {}", e))?;
@@ -185,6 +188,7 @@ async fn run_worker(
                 match server_msg.msg_type.as_str() {
                     "welcome" => {
                         welcomed = true;
+                        eprintln!("[worker] got welcome");
                         if let Some(lifetime) = server_msg.lifetime_shuffles {
                             stats.lifetime_shuffles.store(lifetime, Ordering::Relaxed);
                         }
@@ -249,16 +253,21 @@ async fn run_worker(
                         eprintln!("[worker] rejected: {}", reason);
                     }
                     "client_outdated" => {
-                        return Err("client outdated! make an issue in the github/gitlab".into());
+                        eprintln!("[worker] client_outdated! received");
+                        return Err("client outdated! make an issue in the github".into());
                     }
                     "banned" => {
+                        eprintln!("[worker] acc banned: {:?}", server_msg.reason);
                         let reason = server_msg.reason.unwrap_or_else(|| "unknown".into());
                         return Err(format!("banned: {}", reason));
                     }
                     "contributions_closed" => {
+                        eprintln!("[worker] contributions_closed");
                         return Err("contributions closed".into());
                     }
-                    _ => {}
+                    other => {
+                        eprintln!("[worker] unknown message type: {}", other);
+                    }
                 }
             }
 
