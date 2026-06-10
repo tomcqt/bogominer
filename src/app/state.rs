@@ -11,9 +11,21 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Self {
+        let config = Config::load();
+        if config.has_credentials() {
+            eprintln!(
+                "[boot] saved account found: {}",
+                config.nickname.as_deref().unwrap_or("?")
+            );
+        } else if config.nickname.is_some() {
+            eprintln!("[boot] partial account found (missing recovery code or uuid)");
+        } else {
+            eprintln!("[boot] no saved account");
+        }
+
         Self {
             rt: tokio::runtime::Runtime::new().expect("failed to create tokio runtime"),
-            config: Mutex::new(Config::load()),
+            config: Mutex::new(config),
             stats: Arc::new(Stats::new()),
             pool: Mutex::new(None),
         }

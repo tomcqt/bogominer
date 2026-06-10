@@ -2,11 +2,12 @@ use crate::backend::stats::Stats;
 use crate::backend::worker::{self, WorkerCmd};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::mpsc;
+use std::time::{Duration, Instant};
+use tokio::sync::{mpsc, oneshot};
 
 pub struct Pool {
     worker: Option<mpsc::UnboundedSender<WorkerCmd>>,
+    worker_done: Option<oneshot::Receiver<()>>,
     _error_rx: mpsc::UnboundedReceiver<String>,
     error_tx: mpsc::UnboundedSender<String>,
     code_rx: mpsc::UnboundedReceiver<String>,
@@ -20,6 +21,7 @@ impl Pool {
         let (code_tx, code_rx) = mpsc::unbounded_channel();
         Self {
             worker: None,
+            worker_done: None,
             _error_rx,
             error_tx,
             code_rx,
@@ -36,7 +38,7 @@ impl Pool {
         self.stop();
         self.stats.reset_session();
 
-        let cmd_tx = worker::spawn_worker(
+        let (cmd_tx, done_rx) = worker::spawn_worker(
             uuid.to_string(),
             nickname.to_string(),
             code.to_string(),
@@ -46,15 +48,29 @@ impl Pool {
             self.code_tx.clone(),
         );
         self.worker = Some(cmd_tx);
+        self.worker_done = Some(done_rx);
     }
 
     pub fn stop(&mut self) {
         eprintln!("[pool] stop requested");
         if let Some(w) = self.worker.take() {
             let _ = w.send(WorkerCmd::Stop);
-            eprintln!("[pool] sent stop to worker, sleeping 500ms for clean shutdown");
+            eprintln!("[pool] sent stop to worker, waiting for exit");
         }
-        std::thread::sleep(Duration::from_millis(500));
+        if let Some(mut done_rx) = self.worker_done.take() {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < deadline {
+                if done_rx.try_recv().is_ok() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            if Instant::now() < deadline {
+                eprintln!("[pool] worker exited properly");
+            } else {
+                eprintln!("[pool] worker exit timed out after 5s");
+            }
+        }
         self.stats.active_workers.store(0, Ordering::Relaxed);
         self.stats.solver_threads.store(0, Ordering::Relaxed);
         eprintln!("[pool] stop complete");

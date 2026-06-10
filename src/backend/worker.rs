@@ -6,7 +6,7 @@ use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -92,8 +92,9 @@ pub fn spawn_worker(
     cpu_target: f64,
     on_error: mpsc::UnboundedSender<String>,
     on_code: mpsc::UnboundedSender<String>,
-) -> mpsc::UnboundedSender<WorkerCmd> {
+) -> (mpsc::UnboundedSender<WorkerCmd>, oneshot::Receiver<()>) {
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+    let (done_tx, done_rx) = oneshot::channel();
 
     let stats_inner = stats.clone();
     eprintln!("[pool] spawning worker");
@@ -115,10 +116,11 @@ pub fn spawn_worker(
         } else {
             eprintln!("[worker] exited cleanly");
         }
+        let _ = done_tx.send(());
     });
 
     stats.active_workers.fetch_add(1, Ordering::Relaxed);
-    cmd_tx
+    (cmd_tx, done_rx)
 }
 
 async fn run_worker(
@@ -200,7 +202,7 @@ async fn run_worker(
                 match server_msg.msg_type.as_str() {
                     "welcome" => {
                         welcomed = true;
-                        eprintln!("[worker] got welcome (lifetime={:?}, atb={:?})", server_msg.lifetime_shuffles, server_msg.all_time_best);
+                        eprintln!("[worker] got welcome (lifetime={:?}, atb={:?})", server_msg.lifetime_shuffles.unwrap(), server_msg.all_time_best.unwrap());
                         if let Some(lifetime) = server_msg.lifetime_shuffles {
                             stats.lifetime_shuffles.store(lifetime, Ordering::Relaxed);
                         }
@@ -233,7 +235,7 @@ async fn run_worker(
                         stats.lease_cursor.store(0, Ordering::Relaxed);
                     }
                     "credited" => {
-                        eprintln!("[worker] credited: credit={:?} lifetime={:?} rate={:?} best={:?}", server_msg.credit, server_msg.lifetime_shuffles, server_msg.rate, server_msg.batch_best);
+                        eprintln!("[worker] credited: credit={:?} lifetime={:?} rate={:?} best={:?}", server_msg.credit.unwrap(), server_msg.lifetime_shuffles.unwrap(), server_msg.rate.unwrap(), server_msg.batch_best.unwrap());
                         if let Some(credit) = server_msg.credit {
                             stats.session_shuffles.fetch_add(credit, Ordering::Relaxed);
                         }
