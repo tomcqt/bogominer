@@ -279,6 +279,12 @@ async fn run_worker(
                         eprintln!("[worker] contributions_closed");
                         return Err("contributions closed".into());
                     }
+                    "ping" => {
+                        // keepalive
+                    }
+                    "stats_tick" => {
+                        // broadcast
+                    }
                     other => {
                         eprintln!("[worker] unknown message type: {}", other);
                     }
