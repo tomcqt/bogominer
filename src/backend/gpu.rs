@@ -48,6 +48,40 @@ pub fn downloaded_worker_dir() -> Option<PathBuf> {
         .map(|dirs| dirs.data_dir().join("gpu"))
 }
 
+/// directory the running bogominer executable lives in. the worker is dropped
+/// here so it sits right next to the exe (the build/output folder during dev)
+/// and is picked up first by `find_worker`.
+pub fn exe_dir() -> Option<PathBuf> {
+    Some(std::env::current_exe().ok()?.parent()?.to_path_buf())
+}
+
+/// can we create files in `dir`? used to decide whether the worker can be
+/// dropped next to the exe — it can't when installed read-only (Program Files).
+fn dir_is_writable(dir: &Path) -> bool {
+    if std::fs::create_dir_all(dir).is_err() {
+        return false;
+    }
+    let probe = dir.join(".bogominer_write_test");
+    match std::fs::write(&probe, b"") {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// where the auto-downloaded worker should be written: right next to the exe
+/// when that's writable, otherwise the app data dir as a fallback.
+pub fn auto_download_dir() -> Option<PathBuf> {
+    if let Some(dir) = exe_dir() {
+        if dir_is_writable(&dir) {
+            return Some(dir);
+        }
+    }
+    downloaded_worker_dir()
+}
+
 /// resolve the gpu worker binary: explicit config path first, then next to
 /// the bogominer executable, a `gpu/` subfolder beside it, and finally the
 /// auto-download location.
@@ -77,7 +111,7 @@ pub fn find_worker(config: &Config) -> Option<PathBuf> {
 /// dir. files are written to `.part` first and renamed only when complete.
 #[cfg(windows)]
 pub async fn download_worker() -> Result<PathBuf, String> {
-    let dir = downloaded_worker_dir().ok_or("could not resolve app data dir")?;
+    let dir = auto_download_dir().ok_or("could not resolve a writable worker dir")?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("could not create {:?}: {}", dir, e))?;
 
     let client = reqwest::Client::new();
@@ -109,6 +143,34 @@ pub async fn download_worker() -> Result<PathBuf, String> {
 #[cfg(not(windows))]
 pub async fn download_worker() -> Result<PathBuf, String> {
     Err("the prebuilt gpu worker is windows-only — build bogo-turbo from source and set its path in settings".into())
+}
+
+/// startup hook: if no gpu worker can be found, fetch it automatically so it
+/// sits next to the executable, ready the moment gpu acceleration is enabled.
+/// an explicit, user-set worker path is respected (never downloaded over).
+/// best-effort — failures are only logged, since gpu mining is opt-in.
+pub async fn ensure_worker_present() {
+    let config = Config::load();
+
+    let has_explicit_path = config
+        .gpu_worker_path
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|p| !p.is_empty());
+    if has_explicit_path {
+        return;
+    }
+
+    if let Some(found) = find_worker(&config) {
+        eprintln!("[gpu] worker already present at {:?}, skipping auto-download", found);
+        return;
+    }
+
+    eprintln!("[gpu] worker not found — auto-downloading next to the executable");
+    match download_worker().await {
+        Ok(path) => eprintln!("[gpu] auto-download complete: {:?}", path),
+        Err(e) => eprintln!("[gpu] auto-download failed: {}", e),
+    }
 }
 
 pub struct GpuWorker {
