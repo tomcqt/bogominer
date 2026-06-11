@@ -7,6 +7,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(state::AppState::new())
+        .setup(|_app| {
+            // on launch, make sure the gpu worker is on disk (downloaded next to
+            // the exe if missing) so it's ready when gpu acceleration is enabled.
+            tauri::async_runtime::spawn(crate::backend::gpu::ensure_worker_present());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_state,
             commands::save_new_account,
