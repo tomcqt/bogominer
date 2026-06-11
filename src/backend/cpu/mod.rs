@@ -177,6 +177,16 @@ impl ComputeBackend for CpuBackend {
             base += LANES as u64;
         }
 
+        // scalar tail with the same threshold prune as the scalar backend
+        if simd_end < hi {
+            let tail = run_range_with_threshold(seed64, simd_end, hi, thr);
+            if tail.best_correct > best_correct {
+                best_correct = tail.best_correct;
+                best_arr = tail.best_arr;
+                best_index = tail.best_index;
+            }
+        }
+
         RangeResult {
             count: total,
             best_correct,
