@@ -278,13 +278,35 @@
               GPU acceleration <span class="beta-pill">beta</span>
             </div>
             <div class="setting-sub">
-              planned native compute backend. disabled for now.
+              offloads mining to the bogo-turbo CUDA worker (NVIDIA only),
+              downloaded automatically on first use. replaces cpu mining while
+              enabled.
             </div>
           </div>
-          <label class="switch disabled">
-            <input type="checkbox" id="gpu-toggle" disabled />
+          <label class="switch">
+            <input type="checkbox" id="gpu-toggle" />
             <span></span>
           </label>
+        </div>
+
+        <div class="settings-block">
+          <div class="setting-title">gpu worker path</div>
+          <div class="setting-sub">
+            optional override — path to your own bogo_gpu_turbo.exe. leave
+            empty to use the auto-downloaded worker or one placed next to
+            bogominer.
+          </div>
+          <div class="gpu-path-row">
+            <input
+              class="input mono"
+              id="gpu-path"
+              placeholder="C:\path\to\bogo_gpu_turbo.exe"
+              autocomplete="off"
+            />
+            <button class="btn btn-primary" id="gpu-path-save">save</button>
+          </div>
+          <div class="err" id="gpu-error"></div>
+          <div class="setting-sub" id="gpu-status-note"></div>
         </div>
 
         <div class="settings-row">
