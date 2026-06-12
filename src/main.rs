@@ -5,6 +5,7 @@
 
 mod app;
 mod backend;
+mod compute;
 mod misc;
 
 fn main() {

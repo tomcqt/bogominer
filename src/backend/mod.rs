@@ -1,7 +1,6 @@
 pub mod api;
-pub mod compute;
 pub mod config;
-pub mod cpu;
+pub mod miner;
 pub mod pool;
 pub mod protocol;
 pub mod rng;
