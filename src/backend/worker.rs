@@ -167,20 +167,42 @@ async fn run_worker(
 
     let (stop_tx, _) = watch::channel(false);
 
-    let num_threads = {
-        let cores = num_cpus::get().max(1).min(16);
-        let target = f64::from_bits(cpu_target.load(Ordering::Relaxed));
-        ((target * cores as f64).ceil() as usize).max(1).min(cores)
+    let num_threads = match backend {
+        Backend::Gpu => 1,
+        Backend::Cpu => {
+            let cores = num_cpus::get().max(1).min(16);
+            let target = f64::from_bits(cpu_target.load(Ordering::Relaxed));
+            ((target * cores as f64).ceil() as usize).max(1).min(cores)
+        }
     };
-    eprintln!("[worker] spawning {} solver threads", num_threads);
+    eprintln!(
+        "[worker] spawning {} mining thread(s) for {:?}",
+        num_threads, backend
+    );
 
-    let solver_handles = spawn_solvers(
+    // gpu: build the backend once on a backend thread, on failure fall back
+    // to cpu so mining still runs.
+    let effective_backend = if backend == Backend::Gpu {
+        match crate::compute::gpu::select_backend() {
+            Ok(_) => Backend::Gpu,
+            Err(e) => {
+                eprintln!("[worker] gpu init failed({e}); falling back to cpu");
+                Backend::Cpu
+            }
+        }
+    } else {
+        backend
+    };
+
+    let solver_handles = spawn_miners(
+        effective_backend,
         num_threads,
         lease.clone(),
         stats.clone(),
         cpu_target.clone(),
         stop_tx.subscribe(),
     );
+
     stats
         .solver_threads
         .store(num_threads as u64, Ordering::Relaxed);
@@ -355,7 +377,8 @@ async fn run_worker(
     }
 }
 
-fn spawn_solvers(
+fn spawn_miners(
+    backend: Backend,
     n: usize,
     lease: Arc<Mutex<Option<Arc<LeaseState>>>>,
     stats: Arc<Stats>,
@@ -363,54 +386,75 @@ fn spawn_solvers(
     stop_rx: watch::Receiver<bool>,
 ) -> Vec<std::thread::JoinHandle<()>> {
     let mut handles = Vec::with_capacity(n);
-    for _ in 0..n {
+    for t in 0..n {
         let lease = lease.clone();
         let stats = stats.clone();
         let cpu_target = cpu_target.clone();
         let stop_rx = stop_rx.clone();
-        let handle = std::thread::spawn(move || loop {
-            if *stop_rx.borrow() {
-                return;
-            }
-
-            let current = lease.lock().clone();
-            let Some(l) = current else {
-                std::thread::sleep(Duration::from_millis(50));
-                continue;
+        let handle = std::thread::spawn(move || {
+            // each thread owns its miner. gpu re-selects adapter, on failure
+            // it drops to cpu so the thread still contributes.
+            let mut miner: Box<dyn Miner> = match backend {
+                Backend::Gpu => match crate::compute::gpu::select_backend() {
+                    Ok(m) => m,
+                    Err(e) => {
+                        eprintln!("[worker] thread {t} gpu init failed ({e}); using cpu");
+                        Box::new(CpuMiner::new())
+                    }
+                },
+                Backend::Cpu => Box::new(CpuMiner::new()),
             };
+            eprintln!("[worker] thread {t} mining with {}", miner.name());
+            let chunk = miner.chunk_size();
 
-            let Some((lo, hi)) = l.claim_chunk(CHUNK_SIZE) else {
-                std::thread::sleep(Duration::from_millis(100));
-                continue;
-            };
+            loop {
+                if *stop_rx.borrow() {
+                    return;
+                }
 
-            let t0 = Instant::now();
-            let result = solver::run_range(l.seed, lo, hi);
-            let work_ms = t0.elapsed().as_secs_f64() * 1000.0;
+                let current = lease.lock().clone();
+                let Some(l) = current else {
+                    std::thread::sleep(Duration::from_millis(50));
+                    continue;
+                };
 
-            if result.best_correct >= 0 {
-                stats.note_batch_best(result.best_correct);
-            }
+                let Some((lo, hi)) = l.claim_chunk(chunk) else {
+                    std::thread::sleep(Duration::from_millis(100));
+                    continue;
+                };
 
-            let chunk_rate = if work_ms > 0.0 {
-                (result.count as f64 / (work_ms / 1000.0)) as u64
-            } else {
-                0
-            };
+                let t0 = Instant::now();
+                let threshold = l.best_correct.load(Ordering::Relaxed);
+                let result = miner.compute_range(l.seed, lo, hi, threshold);
+                let work_ms = t0.elapsed().as_secs_f64() * 1000.0;
 
-            stats.rate.store(
-                stats.rate.load(Ordering::Relaxed).max(chunk_rate),
-                Ordering::Relaxed,
-            );
+                if result.best_correct >= 0 {
+                    stats.note_batch_best(result.best_correct);
+                }
 
-            l.report_chunk(&result);
+                let chunk_rate = if work_ms > 0.0 {
+                    (result.count as f64 / (work_ms / 1000.0)) as u64
+                } else {
+                    0
+                };
 
-            let target = f64::from_bits(cpu_target.load(Ordering::Relaxed));
-            if target < 0.999 {
-                let sleep_ms = work_ms * ((1.0 - target) / target);
-                if sleep_ms > 0.5 {
-                    let _ = stop_rx.has_changed();
-                    std::thread::sleep(Duration::from_millis(sleep_ms as u64));
+                stats.rate.store(
+                    stats.rate.load(Ordering::Relaxed).max(chunk_rate),
+                    Ordering::Relaxed,
+                );
+
+                l.report_chunk(&result);
+
+                // throttling only applies to cpu
+                if backend == Backend::Cpu {
+                    let target = f64::from_bits(cpu_target.load(Ordering::Relaxed));
+                    if target < 0.999 {
+                        let sleep_ms = work_ms * ((1.0 - target) / target);
+                        if sleep_ms > 0.5 {
+                            let _ = stop_rx.has_changed();
+                            std::thread::sleep(Duration::from_millis(sleep_ms as u64));
+                        }
+                    }
                 }
             }
         });
