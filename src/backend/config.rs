@@ -13,6 +13,9 @@ pub struct Config {
 
     #[serde(default)]
     pub nickname: Option<String>,
+
+    #[serde(default)]
+    pub gpu_enabled: bool,
 }
 
 pub fn config_path() -> Option<PathBuf> {
@@ -44,6 +47,7 @@ impl Config {
         self.uuid = None;
         self.recovery_code = None;
         self.nickname = None;
+        self.gpu_enabled = false;
         self.save();
     }
 
