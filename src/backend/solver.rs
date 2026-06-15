@@ -153,6 +153,20 @@ mod tests {
     }
 
     #[test]
+    fn test_run_range_with_threshold_matches_run_range_without_threshold() {
+        let seed = 12345;
+        let lo = 100;
+        let hi = 1100;
+        let expected = run_range(seed, lo, hi);
+        let result = run_range_with_threshold(seed, lo, hi, -1);
+
+        assert_eq!(result.count, expected.count);
+        assert_eq!(result.best_correct, expected.best_correct);
+        assert_eq!(result.best_arr, expected.best_arr);
+        assert_eq!(result.best_index, expected.best_index);
+    }
+
+    #[test]
     fn test_run_range_count() {
         let result = run_range(999, 100, 600);
         assert_eq!(result.count, 500);

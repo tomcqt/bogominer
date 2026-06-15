@@ -1,4 +1,4 @@
-use crate::backend::{config::Config, pool::Pool, stats::Stats};
+use crate::backend::{config::Config, gpu::GpuWorker, pool::Pool, stats::Stats};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -7,6 +7,8 @@ pub struct AppState {
     pub config: Mutex<Config>,
     pub stats: Arc<Stats>,
     pub pool: Mutex<Option<Pool>>,
+    pub gpu: Mutex<Option<GpuWorker>>,
+    pub last_cpu_target: Mutex<f64>,
 }
 
 impl AppState {
@@ -28,6 +30,8 @@ impl AppState {
             config: Mutex::new(config),
             stats: Arc::new(Stats::new()),
             pool: Mutex::new(None),
+            gpu: Mutex::new(None),
+            last_cpu_target: Mutex::new(1.0),
         }
     }
 }
@@ -56,6 +60,8 @@ pub struct RuntimeStats {
     pub lease_cursor: u64,
     pub lease_count: u64,
     pub last5: Vec<u8>,
+    pub backend: String,
+    pub gpu_status: String,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]

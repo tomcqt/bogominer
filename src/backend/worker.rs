@@ -101,7 +101,9 @@ pub fn spawn_worker(
     on_error: mpsc::UnboundedSender<String>,
     on_code: mpsc::UnboundedSender<String>,
 ) -> (mpsc::UnboundedSender<WorkerCmd>, oneshot::Receiver<()>) {
+) -> (mpsc::UnboundedSender<WorkerCmd>, oneshot::Receiver<()>) {
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+    let (done_tx, done_rx) = oneshot::channel();
     let (done_tx, done_rx) = oneshot::channel();
 
     let stats_inner = stats.clone();
@@ -126,9 +128,11 @@ pub fn spawn_worker(
             eprintln!("[worker] exited cleanly");
         }
         let _ = done_tx.send(());
+        let _ = done_tx.send(());
     });
 
     stats.active_workers.fetch_add(1, Ordering::Relaxed);
+    (cmd_tx, done_rx)
     (cmd_tx, done_rx)
 }
 
@@ -235,6 +239,7 @@ async fn run_worker(
                     "welcome" => {
                         welcomed = true;
                         eprintln!("[worker] got welcome (lifetime={:?}, atb={:?})", server_msg.lifetime_shuffles.unwrap(), server_msg.all_time_best.unwrap());
+                        eprintln!("[worker] got welcome (lifetime={:?}, atb={:?})", server_msg.lifetime_shuffles.unwrap(), server_msg.all_time_best.unwrap());
                         if let Some(lifetime) = server_msg.lifetime_shuffles {
                             stats.lifetime_shuffles.store(lifetime, Ordering::Relaxed);
                         }
@@ -267,6 +272,7 @@ async fn run_worker(
                         stats.lease_cursor.store(0, Ordering::Relaxed);
                     }
                     "credited" => {
+                        eprintln!("[worker] credited: credit={:?} lifetime={:?} rate={:?} best={:?}", server_msg.credit.unwrap(), server_msg.lifetime_shuffles.unwrap(), server_msg.rate.unwrap(), server_msg.batch_best.unwrap());
                         eprintln!("[worker] credited: credit={:?} lifetime={:?} rate={:?} best={:?}", server_msg.credit.unwrap(), server_msg.lifetime_shuffles.unwrap(), server_msg.rate.unwrap(), server_msg.batch_best.unwrap());
                         if let Some(credit) = server_msg.credit {
                             stats.session_shuffles.fetch_add(credit, Ordering::Relaxed);

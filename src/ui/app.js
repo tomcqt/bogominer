@@ -7,6 +7,7 @@ let runtimeStats = null;
 let cpuTarget = 1.0;
 let statsTimer = null;
 let leaderboardTimer = null;
+let gpuSettings = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -156,8 +157,17 @@ function renderStats(s) {
   runtimeStats = s;
   updateControls(s.running);
 
+  const gpu = s.backend === 'gpu';
+  $('cpu-options-live').style.display = gpu ? 'none' : '';
+  document.querySelector('.live-pill').textContent = gpu
+    ? 'contributing live · gpu'
+    : 'contributing live';
+  if (gpu && !s.running && s.gpuStatus && s.gpuStatus.startsWith('error')) {
+    setConnectError(`gpu worker stopped — ${s.gpuStatus}`);
+  }
+
   $('stat-rate').textContent = `${fmtCompact(s.rate)}/s`;
-  $('stat-threads').textContent = String(s.solverThreads || 0);
+  $('stat-threads').textContent = gpu ? 'GPU' : String(s.solverThreads || 0);
   $('stat-session').textContent = fmtCompact(s.sessionShuffles);
   $('stat-lifetime').textContent = fmtCompact(s.lifetimeShuffles);
   $('stat-tick-best').textContent =
@@ -283,6 +293,32 @@ async function refreshLeaderboard() {
   }
 }
 
+function renderGpuSettings() {
+  if (!gpuSettings) return;
+  $('gpu-toggle').checked = gpuSettings.enabled;
+  if (document.activeElement !== $('gpu-path')) {
+    $('gpu-path').value = gpuSettings.configuredPath || '';
+  }
+  const note = $('gpu-status-note');
+  if (gpuSettings.available) {
+    note.textContent = `worker found: ${gpuSettings.resolvedPath}`;
+  } else if (gpuSettings.configuredPath) {
+    note.textContent = 'configured path does not exist.';
+  } else {
+    note.textContent =
+      'worker not present yet — it will be downloaded automatically when you enable gpu acceleration.';
+  }
+}
+
+async function refreshGpuSettings() {
+  try {
+    gpuSettings = await invoke('get_gpu_settings');
+    renderGpuSettings();
+  } catch (err) {
+    showError('gpu-error', String(err));
+  }
+}
+
 async function loadContributors() {
   try {
     const contributors = await invoke('get_contributors');
@@ -389,6 +425,38 @@ function wireEvents() {
   $('settings-btn').addEventListener('click', () => {
     $('settings-modal').classList.add('is-open');
     $('settings-modal').setAttribute('aria-hidden', 'false');
+    refreshGpuSettings();
+  });
+
+  $('gpu-toggle').addEventListener('change', async (e) => {
+    showError('gpu-error', '');
+    try {
+      if (e.target.checked && gpuSettings && !gpuSettings.available) {
+        $('gpu-status-note').textContent =
+          'downloading bogo-turbo worker (~2 MB)…';
+        gpuSettings = await invoke('download_gpu_worker');
+      }
+      gpuSettings = await invoke('set_gpu_enabled', {
+        enabled: e.target.checked,
+      });
+      renderGpuSettings();
+    } catch (err) {
+      e.target.checked = !e.target.checked;
+      renderGpuSettings();
+      showError('gpu-error', String(err));
+    }
+  });
+
+  $('gpu-path-save').addEventListener('click', async () => {
+    showError('gpu-error', '');
+    try {
+      gpuSettings = await invoke('set_gpu_worker_path', {
+        path: $('gpu-path').value,
+      });
+      renderGpuSettings();
+    } catch (err) {
+      showError('gpu-error', String(err));
+    }
   });
 
   $('settings-close').addEventListener('click', closeSettings);
@@ -415,6 +483,7 @@ async function boot() {
   wireEvents();
   await refreshAppState();
   await refreshStats();
+  await refreshGpuSettings();
   await refreshLeaderboard();
   loadContributors();
 
