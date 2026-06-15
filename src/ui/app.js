@@ -482,6 +482,7 @@ async function boot() {
   applyTheme(localStorage.getItem(THEME_KEY) || 'light');
   wireEvents();
   await refreshAppState();
+  await invoke('prime_lifetime_stats').catch(() => {});
   await refreshStats();
   await refreshGpuSettings();
   await refreshLeaderboard();

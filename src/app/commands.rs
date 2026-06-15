@@ -295,6 +295,39 @@ pub fn get_runtime_stats(state: State<AppState>) -> RuntimeStats {
     }
 }
 
+#[tauri::command]
+pub fn prime_lifetime_stats(state: State<AppState>) -> Result<(), String> {
+    let code = {
+        let config = state.config.lock();
+        match config.recovery_code.clone() {
+            Some(c) if !c.is_empty() => c,
+            _ => return Ok(()),
+        }
+    };
+
+    let info = state
+        .rt
+        .block_on(api::login_with_code(&code))
+        .map_err(|e| {
+            eprintln!("[boot] prime lifetime stats failed: {}", e);
+            e
+        })?;
+
+    eprintln!(
+        "[boot] primed lifetime={} all_time_best={}",
+        info.total, info.all_time_best
+    );
+    state
+        .stats
+        .lifetime_shuffles
+        .store(info.total, Ordering::Relaxed);
+    state
+        .stats
+        .all_time_best
+        .store(info.all_time_best as i32, Ordering::Relaxed);
+    Ok(())
+}
+
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GpuSettings {

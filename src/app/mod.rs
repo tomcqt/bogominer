@@ -29,6 +29,7 @@ pub fn run() {
             commands::get_contributors,
             commands::get_leaderboard,
             commands::open_external,
+            commands::prime_lifetime_stats,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run tauri app");
