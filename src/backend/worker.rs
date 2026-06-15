@@ -101,7 +101,6 @@ pub fn spawn_worker(
     on_error: mpsc::UnboundedSender<String>,
     on_code: mpsc::UnboundedSender<String>,
 ) -> (mpsc::UnboundedSender<WorkerCmd>, oneshot::Receiver<()>) {
-) -> (mpsc::UnboundedSender<WorkerCmd>, oneshot::Receiver<()>) {
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
     let (done_tx, done_rx) = oneshot::channel();
     let (done_tx, done_rx) = oneshot::channel();
@@ -132,8 +131,7 @@ pub fn spawn_worker(
     });
 
     stats.active_workers.fetch_add(1, Ordering::Relaxed);
-    (cmd_tx, done_rx)
-    (cmd_tx, done_rx)
+    (cmd_tx, done_rx)(cmd_tx, done_rx)
 }
 
 async fn run_worker(
