@@ -1,3 +1,8 @@
+mod global;
+
+use crate::backend::miner::Miner;
+use global::{GlobalGpuMiner, SelectedAdapter};
+
 const VENDOR_NVIDIA: u32 = 0x10DE;
 const VENDOR_AMD: u32 = 0x1002;
 const VENDOR_INTEL: u32 = 0x8086;

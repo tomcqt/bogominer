@@ -103,7 +103,6 @@ pub fn spawn_worker(
 ) -> (mpsc::UnboundedSender<WorkerCmd>, oneshot::Receiver<()>) {
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
     let (done_tx, done_rx) = oneshot::channel();
-    let (done_tx, done_rx) = oneshot::channel();
 
     let stats_inner = stats.clone();
     eprintln!("[worker] spawning worker (backend={:?})", backend);
@@ -126,7 +125,6 @@ pub fn spawn_worker(
         } else {
             eprintln!("[worker] exited cleanly");
         }
-        let _ = done_tx.send(());
         let _ = done_tx.send(());
     });
 

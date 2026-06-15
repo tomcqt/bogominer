@@ -1,7 +1,7 @@
 use super::state::{AccountView, AppState, Contributor, RuntimeStats};
-#[cfg(feature = "gpu")]
-use crate::backend::gpu;
 use crate::backend::{api, config::Config, pool::Pool, worker::Backend};
+#[cfg(feature = "gpu")]
+use crate::compute::gpu;
 use crate::misc::validate_nick;
 use serde::Deserialize;
 use std::{

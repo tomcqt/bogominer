@@ -1,7 +1,6 @@
 use crate::backend::miner::Miner;
 use crate::backend::solver::{RangeResult, N};
 use pollster::FutureExt as _;
-use wgpu::util::DeviceExt as _;
 
 const SHADER: &str = include_str!("kernel.wgsl");
 
@@ -131,8 +130,6 @@ impl GlobalGpuMiner {
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
-
-        let _ = DeviceExt::create_buffer_init; // keep import meaningful across wgpu versions
 
         eprintln!(
             "[gpu] pipeline ready: blocks={} threads_per_block={} chunk={}",
