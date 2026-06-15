@@ -185,12 +185,20 @@ async fn run_worker(
     // gpu: build the backend once on a backend thread, on failure fall back
     // to cpu so mining still runs.
     let effective_backend = if backend == Backend::Gpu {
-        match crate::compute::gpu::select_backend() {
-            Ok(_) => Backend::Gpu,
-            Err(e) => {
-                eprintln!("[worker] gpu init failed({e}); falling back to cpu");
-                Backend::Cpu
+        #[cfg(feature = "gpu")]
+        {
+            match crate::compute::gpu::select_backend() {
+                Ok(_) => Backend::Gpu,
+                Err(e) => {
+                    eprintln!("[worker] gpu init failed({e}); falling back to cpu");
+                    Backend::Cpu
+                }
             }
+        }
+        #[cfg(not(feature = "gpu"))]
+        {
+            eprintln!("[worker] gpu requested but not compiled in; using cpu");
+            Backend::Cpu
         }
     } else {
         backend
@@ -399,6 +407,7 @@ fn spawn_miners(
             // each thread owns its miner. gpu re-selects adapter, on failure
             // it drops to cpu so the thread still contributes.
             let mut miner: Box<dyn Miner> = match backend {
+                #[cfg(feature = "gpu")]
                 Backend::Gpu => match crate::compute::gpu::select_backend() {
                     Ok(m) => m,
                     Err(e) => {
@@ -406,6 +415,8 @@ fn spawn_miners(
                         Box::new(CpuMiner::new())
                     }
                 },
+                #[cfg(not(feature = "gpu"))]
+                Backend::Gpu => Box::new(CpuMiner::new()),
                 Backend::Cpu => Box::new(CpuMiner::new()),
             };
             eprintln!("[worker] thread {t} mining with {}", miner.name());
