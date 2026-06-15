@@ -29,10 +29,11 @@ pub const WORKER_EXE: &str = if cfg!(windows) {
 };
 
 // the worker can be fetched automatically so nobody has to place files by
-// hand. urls are pinned to a commit, so the downloaded bytes can never change
-// under us (raw.githubusercontent.com is content-addressed by commit).
+// hand. we track the repo's default branch so the newest worker build is
+// always fetched. trade-off vs. a pinned commit: the downloaded bytes can
+// change under us — acceptable here since it's our own first-party worker repo.
 const WORKER_SOURCE_REPO: &str = "Mafiosoweb1/bogo-turbo";
-const WORKER_SOURCE_COMMIT: &str = "cff1b0715f892959a23048596fb280ef4f29bf1d";
+const WORKER_SOURCE_REF: &str = "main";
 #[cfg(windows)]
 const WORKER_FILES: &[&str] = &[
     "bogo_gpu_turbo.exe",
@@ -41,6 +42,11 @@ const WORKER_FILES: &[&str] = &[
     "vcruntime140_1.dll",
     "z.dll",
 ];
+// sidecar file written next to the worker recording the exe's http etag (the
+// git blob hash raw.githubusercontent serves). on launch we compare it against
+// the live etag to decide whether a newer build needs downloading.
+#[cfg(windows)]
+const WORKER_VERSION_FILE: &str = "bogo_turbo.version";
 
 /// where the auto-downloaded worker lives (app data dir, survives updates).
 pub fn downloaded_worker_dir() -> Option<PathBuf> {
@@ -107,26 +113,52 @@ pub fn find_worker(config: &Config) -> Option<PathBuf> {
     candidates.into_iter().find(|c| c.is_file())
 }
 
-/// fetch the prebuilt worker (~2 MB, exe + runtime dlls) into the app data
-/// dir. files are written to `.part` first and renamed only when complete.
 #[cfg(windows)]
-pub async fn download_worker() -> Result<PathBuf, String> {
-    let dir = auto_download_dir().ok_or("could not resolve a writable worker dir")?;
-    std::fs::create_dir_all(&dir).map_err(|e| format!("could not create {:?}: {}", dir, e))?;
+fn worker_url(file: &str) -> String {
+    format!(
+        "https://raw.githubusercontent.com/{}/{}/dist/{}",
+        WORKER_SOURCE_REPO, WORKER_SOURCE_REF, file
+    )
+}
 
-    let client = reqwest::Client::new();
+/// recorded version (the worker exe's etag) of the worker installed in `dir`.
+#[cfg(windows)]
+fn read_worker_version(dir: &Path) -> Option<String> {
+    std::fs::read_to_string(dir.join(WORKER_VERSION_FILE))
+        .ok()
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
+}
+
+#[cfg(windows)]
+fn write_worker_version(dir: &Path, etag: &str) {
+    if !etag.is_empty() {
+        let _ = std::fs::write(dir.join(WORKER_VERSION_FILE), etag);
+    }
+}
+
+/// download every worker file into `dir` (written to `.part` first and renamed
+/// only when complete) and return the exe's http etag for version tracking.
+#[cfg(windows)]
+async fn fetch_worker_files(client: &reqwest::Client, dir: &Path) -> Result<String, String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("could not create {:?}: {}", dir, e))?;
+
+    let mut exe_etag = String::new();
     for file in WORKER_FILES {
-        let url = format!(
-            "https://raw.githubusercontent.com/{}/{}/dist/{}",
-            WORKER_SOURCE_REPO, WORKER_SOURCE_COMMIT, file
-        );
+        let url = worker_url(file);
         eprintln!("[gpu] downloading {}", url);
-        let bytes = client
+        let resp = client
             .get(&url)
             .send()
             .await
             .and_then(|r| r.error_for_status())
-            .map_err(|e| format!("download of {} failed: {}", file, e))?
+            .map_err(|e| format!("download of {} failed: {}", file, e))?;
+        if *file == WORKER_EXE {
+            if let Some(etag) = resp.headers().get(reqwest::header::ETAG) {
+                exe_etag = etag.to_str().unwrap_or("").to_owned();
+            }
+        }
+        let bytes = resp
             .bytes()
             .await
             .map_err(|e| format!("download of {} failed: {}", file, e))?;
@@ -137,7 +169,58 @@ pub async fn download_worker() -> Result<PathBuf, String> {
             .map_err(|e| format!("could not finalize {}: {}", file, e))?;
         eprintln!("[gpu] saved {} ({} bytes)", file, bytes.len());
     }
+    Ok(exe_etag)
+}
+
+/// fetch the prebuilt worker (~2 MB, exe + runtime dlls) into the app data dir
+/// and record its version so later launches can tell when it goes stale.
+#[cfg(windows)]
+pub async fn download_worker() -> Result<PathBuf, String> {
+    let dir = auto_download_dir().ok_or("could not resolve a writable worker dir")?;
+    let client = reqwest::Client::new();
+    let etag = fetch_worker_files(&client, &dir).await?;
+    write_worker_version(&dir, &etag);
     Ok(dir.join(WORKER_EXE))
+}
+
+/// check whether the worker installed at `exe_path` is still the latest build
+/// and re-download it in place if not. the check is a cheap HEAD request whose
+/// etag is compared to the one recorded at download time. best-effort: any
+/// network/io failure leaves the existing worker untouched (only logged).
+#[cfg(windows)]
+async fn update_worker_if_outdated(exe_path: &Path) {
+    let Some(dir) = exe_path.parent() else { return };
+    let client = reqwest::Client::new();
+
+    let remote_etag = match client.head(worker_url(WORKER_EXE)).send().await {
+        Ok(resp) => resp
+            .headers()
+            .get(reqwest::header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned),
+        Err(e) => {
+            eprintln!("[gpu] update check failed (keeping current worker): {}", e);
+            return;
+        }
+    };
+    let Some(remote_etag) = remote_etag else {
+        eprintln!("[gpu] could not read remote worker etag — keeping current worker");
+        return;
+    };
+
+    if read_worker_version(dir).as_deref() == Some(remote_etag.as_str()) {
+        eprintln!("[gpu] worker is up to date");
+        return;
+    }
+
+    eprintln!("[gpu] newer worker available — updating in place at {:?}", dir);
+    match fetch_worker_files(&client, dir).await {
+        Ok(etag) => {
+            write_worker_version(dir, &etag);
+            eprintln!("[gpu] worker updated");
+        }
+        Err(e) => eprintln!("[gpu] worker update failed (keeping current worker): {}", e),
+    }
 }
 
 #[cfg(not(windows))]
@@ -145,10 +228,12 @@ pub async fn download_worker() -> Result<PathBuf, String> {
     Err("the prebuilt gpu worker is windows-only — build bogo-turbo from source and set its path in settings".into())
 }
 
-/// startup hook: if no gpu worker can be found, fetch it automatically so it
-/// sits next to the executable, ready the moment gpu acceleration is enabled.
-/// an explicit, user-set worker path is respected (never downloaded over).
-/// best-effort — failures are only logged, since gpu mining is opt-in.
+/// startup hook: make sure an up-to-date gpu worker is on disk. if none is
+/// found it's downloaded next to the executable; if one is present its version
+/// is checked against the latest published build and re-downloaded if stale, so
+/// it's ready the moment gpu acceleration is enabled. an explicit, user-set
+/// worker path is respected (never downloaded over). best-effort — failures are
+/// only logged, since gpu mining is opt-in.
 pub async fn ensure_worker_present() {
     let config = Config::load();
 
@@ -162,7 +247,15 @@ pub async fn ensure_worker_present() {
     }
 
     if let Some(found) = find_worker(&config) {
-        eprintln!("[gpu] worker already present at {:?}, skipping auto-download", found);
+        #[cfg(windows)]
+        {
+            eprintln!("[gpu] worker present at {:?}, checking for a newer version", found);
+            update_worker_if_outdated(&found).await;
+        }
+        #[cfg(not(windows))]
+        {
+            eprintln!("[gpu] worker already present at {:?}, skipping auto-download", found);
+        }
         return;
     }
 
