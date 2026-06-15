@@ -50,7 +50,7 @@ fn rank(device_type: wgpu::DeviceType) -> u8 {
     }
 }
 
-fn pick_adapter() -> Option<(wgpu::Adapter, Vendor, String)> {
+fn pick_adapter(verbose: bool) -> Option<(wgpu::Adapter, Vendor, String)> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::all(),
         ..Default::default()
@@ -61,14 +61,16 @@ fn pick_adapter() -> Option<(wgpu::Adapter, Vendor, String)> {
         let info = adapter.get_info();
         let vendor = Vendor::from_id(info.vendor);
         let has_int64 = adapter.features().contains(wgpu::Features::SHADER_INT64);
-        eprintln!(
-            "[gpu] candidate: name={:?} vendor={} type={:?} backend={:?} int64={}",
-            info.name,
-            vendor.as_str(),
-            info.device_type,
-            info.backend,
-            has_int64
-        );
+        if verbose {
+            eprintln!(
+                "[gpu] candidate: name={:?} vendor={} type={:?} backend={:?} int64={}",
+                info.name,
+                vendor.as_str(),
+                info.device_type,
+                info.backend,
+                has_int64
+            );
+        }
         if !has_int64 {
             continue;
         }
@@ -89,7 +91,7 @@ fn pick_adapter() -> Option<(wgpu::Adapter, Vendor, String)> {
 // clear home for future gpu/cuda (nvidia) or gpu/amd (amd) backends.
 pub fn select_backend() -> Result<Box<dyn Miner>, String> {
     let (adapter, vendor, label) =
-        pick_adapter().ok_or_else(|| "no gpu with SHADER_INT64 support found".to_string())?;
+        pick_adapter(true).ok_or_else(|| "no gpu with SHADER_INT64 support found".to_string())?;
 
     eprintln!(
         "[gpu] selected vendor={} adapter={}",
@@ -109,10 +111,10 @@ pub fn select_backend() -> Result<Box<dyn Miner>, String> {
 
 // cheap probe for the settings panel: is any usable gpu present?
 pub fn is_available() -> bool {
-    pick_adapter().is_some()
+    pick_adapter(false).is_some()
 }
 
 // describe the gpu that would be selected, for the settings panel.
 pub fn describe() -> Option<String> {
-    pick_adapter().map(|(_, v, l)| format!("{} ({})", l, v.as_str()))
+    pick_adapter(false).map(|(_, v, l)| format!("{} ({})", l, v.as_str()))
 }
