@@ -131,7 +131,7 @@ pub fn spawn_worker(
     });
 
     stats.active_workers.fetch_add(1, Ordering::Relaxed);
-    (cmd_tx, done_rx)(cmd_tx, done_rx)
+    (cmd_tx, done_rx)
 }
 
 async fn run_worker(
