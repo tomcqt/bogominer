@@ -1020,25 +1020,6 @@ main {
   cursor: not-allowed;
 }
 
-.gpu-path-row {
-  display: flex;
-  align-items: stretch;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.gpu-path-row .input {
-  flex: 1;
-  padding: 10px 12px;
-  font-size: 13px;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.gpu-path-row .btn {
-  flex: none;
-}
-
 .contributors {
   display: flex;
   flex-wrap: wrap;

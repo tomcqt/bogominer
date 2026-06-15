@@ -269,7 +269,7 @@ pub fn get_runtime_stats(state: State<AppState>) -> RuntimeStats {
     } else if state.config.lock().gpu_enabled {
         "gpu"
     } else {
-        "gpu"
+        "cpu"
     };
 
     RuntimeStats {

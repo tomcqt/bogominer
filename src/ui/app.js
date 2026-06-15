@@ -430,11 +430,6 @@ function wireEvents() {
   $('gpu-toggle').addEventListener('change', async (e) => {
     showError('gpu-error', '');
     try {
-      if (e.target.checked && gpuSettings && !gpuSettings.available) {
-        $('gpu-status-note').textContent =
-          'downloading bogo-turbo worker (~2 MB)…';
-        gpuSettings = await invoke('download_gpu_worker');
-      }
       gpuSettings = await invoke('set_gpu_enabled', {
         enabled: e.target.checked,
       });
