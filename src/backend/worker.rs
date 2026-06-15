@@ -1,6 +1,8 @@
+use crate::backend::miner::Miner;
 use crate::backend::protocol::{HelloMsg, ResultMsg, ServerMsg, StopMsg};
-use crate::backend::solver;
+use crate::backend::solver::{self};
 use crate::backend::stats::Stats;
+use crate::compute::cpu::CpuMiner;
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
@@ -11,7 +13,12 @@ use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
 const WS_URL: &str = "wss://bogo.swapjs.dev/ws";
-const CHUNK_SIZE: u64 = 2_000_000;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Backend {
+    Cpu,
+    Gpu,
+}
 
 #[derive(Debug)]
 pub enum WorkerCmd {
@@ -90,6 +97,7 @@ pub fn spawn_worker(
     code: String,
     stats: Arc<Stats>,
     cpu_target: f64,
+    backend: Backend,
     on_error: mpsc::UnboundedSender<String>,
     on_code: mpsc::UnboundedSender<String>,
 ) -> (mpsc::UnboundedSender<WorkerCmd>, oneshot::Receiver<()>) {
@@ -97,7 +105,7 @@ pub fn spawn_worker(
     let (done_tx, done_rx) = oneshot::channel();
 
     let stats_inner = stats.clone();
-    eprintln!("[pool] spawning worker");
+    eprintln!("[worker] spawning worker (backend={:?})", backend);
     tokio::spawn(async move {
         let result: Result<(), String> = run_worker(
             uuid,
@@ -105,6 +113,7 @@ pub fn spawn_worker(
             code,
             stats_inner.clone(),
             cpu_target,
+            backend,
             cmd_rx,
             on_code,
         )
@@ -129,6 +138,7 @@ async fn run_worker(
     code: String,
     stats: Arc<Stats>,
     initial_cpu_target: f64,
+    backend: Backend,
     mut cmd_rx: mpsc::UnboundedReceiver<WorkerCmd>,
     on_code: mpsc::UnboundedSender<String>,
 ) -> Result<(), String> {
