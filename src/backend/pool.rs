@@ -1,9 +1,9 @@
 use crate::backend::stats::Stats;
-use crate::backend::worker::{self, WorkerCmd};
+use crate::backend::worker::{self, Backend, WorkerCmd};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot}; // "like niko oneshot?" - @PlutonicBird (github)
 
 pub struct Pool {
     worker: Option<mpsc::UnboundedSender<WorkerCmd>>,
@@ -30,10 +30,17 @@ impl Pool {
         }
     }
 
-    pub fn start(&mut self, uuid: &str, nickname: &str, code: &str, cpu_target: f64) {
+    pub fn start(
+        &mut self,
+        uuid: &str,
+        nickname: &str,
+        code: &str,
+        cpu_target: f64,
+        backend: Backend,
+    ) {
         eprintln!(
-            "[pool] start (uuid={:?}, nick={:?}, cpu={})",
-            uuid, nickname, cpu_target
+            "[pool] start (uuid={:?}, nick={:?}, cpu={}, backend={:?})",
+            uuid, nickname, cpu_target, backend
         );
         self.stop();
         self.stats.reset_session();
@@ -44,6 +51,7 @@ impl Pool {
             code.to_string(),
             self.stats.clone(),
             cpu_target,
+            backend,
             self.error_tx.clone(),
             self.code_tx.clone(),
         );
@@ -76,7 +84,14 @@ impl Pool {
         eprintln!("[pool] stop complete");
     }
 
-    pub fn set_cpu_target(&mut self, cpu_target: f64, uuid: &str, nickname: &str, code: &str) {
+    pub fn set_cpu_target(
+        &mut self,
+        cpu_target: f64,
+        uuid: &str,
+        nickname: &str,
+        code: &str,
+        backend: Backend,
+    ) {
         let cores = num_cpus::get().max(1).min(16);
         let old_threads = self.stats.solver_threads.load(Ordering::Relaxed) as usize;
         let new_threads = ((cpu_target * cores as f64).ceil() as usize)
@@ -90,7 +105,7 @@ impl Pool {
         if old_threads != new_threads && self.worker.is_some() {
             eprintln!("[pool] thread count changed, rebuilding");
             self.stop();
-            self.start(uuid, nickname, code, cpu_target);
+            self.start(uuid, nickname, code, cpu_target, backend);
         } else if let Some(w) = &self.worker {
             let _ = w.send(WorkerCmd::SetCpuTarget(cpu_target));
         }
