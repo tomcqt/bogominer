@@ -292,19 +292,10 @@
         <div class="settings-block">
           <div class="setting-title">gpu worker path</div>
           <div class="setting-sub">
-            optional override — path to your own bogo_gpu_turbo.exe. leave
-            empty to use the auto-downloaded worker or one placed next to
-            bogominer.
+            optional override — path to your own bogo_gpu_turbo.exe. leave empty
+            to use the auto-downloaded worker or one placed next to bogominer.
           </div>
-          <div class="gpu-path-row">
-            <input
-              class="input mono"
-              id="gpu-path"
-              placeholder="C:\path\to\bogo_gpu_turbo.exe"
-              autocomplete="off"
-            />
-            <button class="btn btn-primary" id="gpu-path-save">save</button>
-          </div>
+          <p class="gpu-note" id="gpu-device-note"></p>
           <div class="err" id="gpu-error"></div>
           <div class="setting-sub" id="gpu-status-note"></div>
         </div>

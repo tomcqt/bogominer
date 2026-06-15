@@ -296,17 +296,16 @@ async function refreshLeaderboard() {
 function renderGpuSettings() {
   if (!gpuSettings) return;
   $('gpu-toggle').checked = gpuSettings.enabled;
-  if (document.activeElement !== $('gpu-path')) {
-    $('gpu-path').value = gpuSettings.configuredPath || '';
-  }
-  const note = $('gpu-status-note');
-  if (gpuSettings.available) {
-    note.textContent = `worker found: ${gpuSettings.resolvedPath}`;
-  } else if (gpuSettings.configuredPath) {
-    note.textContent = 'configured path does not exist.';
+  const s = gpuSettings;
+  const toggle = $('gpu-toggle');
+  toggle.disabled = !s.supported || !s.available;
+  const note = $('gpu-device-note');
+  if (!s.supported) {
+    note.textContent = 'this build was compiled without gpu support';
+  } else if (s.device) {
+    note.textContent = 'gpu: ' + s.device;
   } else {
-    note.textContent =
-      'worker not present yet — it will be downloaded automatically when you enable gpu acceleration.';
+    note.textContent = 'no compatible gpu detected';
   }
 }
 
@@ -443,18 +442,6 @@ function wireEvents() {
     } catch (err) {
       e.target.checked = !e.target.checked;
       renderGpuSettings();
-      showError('gpu-error', String(err));
-    }
-  });
-
-  $('gpu-path-save').addEventListener('click', async () => {
-    showError('gpu-error', '');
-    try {
-      gpuSettings = await invoke('set_gpu_worker_path', {
-        path: $('gpu-path').value,
-      });
-      renderGpuSettings();
-    } catch (err) {
       showError('gpu-error', String(err));
     }
   });
