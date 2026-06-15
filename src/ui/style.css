@@ -952,6 +952,29 @@ main {
   margin-top: 3px;
 }
 
+.gpu-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 6px 0 0;
+  font-family: var(--mono, monospace);
+  word-break: break-word;
+}
+
+.settings-row > div:first-child {
+  min-width: 0;
+}
+
+#gpu-device-note:empty,
+#gpu-status-note:empty {
+  display: none;
+}
+
+#gpu-error:empty {
+  display: none;
+  min-height: 0;
+  margin: 0;
+}
+
 .beta-pill {
   display: inline-flex;
   align-items: center;
