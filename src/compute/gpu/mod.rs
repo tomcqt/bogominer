@@ -85,10 +85,8 @@ fn pick_adapter(verbose: bool) -> Option<(wgpu::Adapter, Vendor, String)> {
     best.map(|(a, v, l, _)| (a, v, l))
 }
 
-// public entry point used by the worker when gpu mining is enabled. picks the
-// best adapter, identifies its vendor, and constructs the matching backend.
-// today all vendors map to the cross-vendor global backend; the match leaves a
-// clear home for future gpu/cuda (nvidia) or gpu/amd (amd) backends.
+// public entry point used by the worker when gpu mining is enabled.
+// prefers native backends when feature is present
 pub fn select_backend() -> Result<Box<dyn Miner>, String> {
     let (adapter, vendor, label) =
         pick_adapter(true).ok_or_else(|| "no gpu with SHADER_INT64 support found".to_string())?;
@@ -99,14 +97,53 @@ pub fn select_backend() -> Result<Box<dyn Miner>, String> {
         label
     );
 
+    #[cfg(feature = "gpu-cuda")]
+    if vendor == Vendor::Nvidia {
+        match cuda::CudaMiner::new() {
+            Ok(m) => {
+                let m: Box<dyn Miner> = Box::new(m);
+                eprintln!("[gpu] backend chosen: {}", m.name());
+                return Ok(m);
+            }
+            Err(e) => eprintln!("[gpu] cuda unavailable ({e}); falling back"),
+        }
+    }
+
+    #[cfg(feature = "gpu-hip")]
+    if vendor == Vendor::Amd {
+        match hip::HipMiner::new() {
+            Ok(m) => {
+                let m: Box<dyn Miner> = Box::new(m);
+                eprintln!("[gpu] backend chosen: {}", m.name());
+                return Ok(m);
+            }
+            Err(e) => eprintln!("[gpu] hip unabailable ({e}); falling back"),
+        }
+    }
+
     let selected = SelectedAdapter { adapter, label };
-    let miner: Box<dyn Miner> = match vendor {
-        // Vendor::Nvidia if cfg!(feature = "gpu-cuda") => Box::new(cuda::CudaMiner::new(...)?),
-        // Vendor::Amd if cfg!(feature = "gpu-hip") => Box::new(amd::HipMiner::new(...)?),
-        _ => Box::new(GlobalGpuMiner::new(selected)?),
-    };
+    let miner: Box<dyn Miner> = Box::new(GlobalGpuMiner::new(selected)?);
     eprintln!("[gpu] backend chosen: {}", miner.name());
     Ok(miner)
+}
+
+// same as select_backend but without constructing real miner, for
+// settings panel. returns core name
+pub fn probe_active_core() -> Option<String> {
+    let (_, vendor, label) = pick_adapter(false)?;
+
+    #[cfg(feature = "gpu-cuda")]
+    if vendor == Vendor::Nvidia && cuda::CudaMiner::is_runtime_available() {
+        return Some(format!("gpu/cuda ({})", label));
+    }
+
+    #[cfg(feature = "gpu-hip")]
+    if vendor == Vendor::Amd && hip::HipMiner::is_runtime_available() {
+        return Some(format!("gpu/hip ({})", label));
+    }
+
+    let _ = vendor;
+    Some(format!("gpu/global ({})", label))
 }
 
 // cheap probe for the settings panel: is any usable gpu present?
