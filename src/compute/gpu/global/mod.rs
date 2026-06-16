@@ -25,6 +25,9 @@ pub struct GlobalGpuMiner {
     staging_buf: wgpu::Buffer,
     blocks: u32,
     label: String,
+    score_history: [u32; 32],
+    history_pos: usize,
+    history_count: usize,
 }
 
 impl GlobalGpuMiner {
@@ -146,7 +149,30 @@ impl GlobalGpuMiner {
             staging_buf,
             blocks,
             label,
+            score_history: [0u32; 32],
+            history_pos: 0,
+            history_count: 0,
         })
+    }
+
+    // moving average of recent best scores, mirrors cuda/hip host logic
+    fn record_score(&mut self, score: u32) {
+        if score == 0 {
+            return;
+        }
+        self.score_history[self.history_pos] = score;
+        self.history_pos = (self.history_pos + 1) % 32;
+        if self.history_count < 32 {
+            self.history_count += 1;
+        }
+    }
+
+    fn min_threshold(&self) -> u32 {
+        if self.history_count < 8 {
+            return 0;
+        }
+        let sum: u32 = self.score_history[..self.history_count].iter().sum();
+        (sum / self.history_count as u32).saturating_sub(1)
     }
 }
 
@@ -156,6 +182,7 @@ impl Miner for GlobalGpuMiner {
     }
 
     fn compute_range(&mut self, seed: u64, lo: u64, hi: u64, threshold: i32) -> RangeResult {
+        let eff_threshold = threshold.max(self.min_threshold() as i32);
         let params_data: [u32; 7] = [
             seed as u32,
             (seed >> 32) as u32,
@@ -163,7 +190,7 @@ impl Miner for GlobalGpuMiner {
             (lo >> 32) as u32,
             hi as u32,
             (hi >> 32) as u32,
-            threshold as u32,
+            eff_threshold as u32,
         ];
         self.queue
             .write_buffer(&self.params_buf, 0, bytemuck::cast_slice(&params_data));
@@ -225,6 +252,9 @@ impl Miner for GlobalGpuMiner {
         let result = find_winner(&data, self.blocks as usize, lo, hi);
         drop(data);
         self.staging_buf.unmap();
+        if result.best_correct > 0 {
+            self.record_score(result.best_correct as u32);
+        }
         result
     }
 
