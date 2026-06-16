@@ -109,23 +109,38 @@ fn main(
 
         for (var q = 0u; q < 25u; q++) { lds[q * 256u + lid] = q + 1u; }
 
+        // mirror solver::shuffle_if_above_threshold: prune candidates that
+        // cannot beat the live best. identical winner, never changes best_arr
+        let eff = max(params.threshold, best_score);
+        var fixed: i32 = 0;
+        var active_mask: u32 = (1u << 25u) - 1u;
+        var aborted = false;
         for (var i = 24u; i > 0u; i--) {
-            let j   = xint(&rng, i + 1u);
-            let tmp = lds[i * 256u + lid];
-            lds[i * 256u + lid] = lds[j * 256u + lid];
-            lds[j * 256u + lid] = tmp;
+            let j = xint(&rng, i + 1u);
+            let placed = lds[j * 256u + lid];
+            lds[j * 256u + lid] = lds[i * 256u + lid];
+            lds[i * 256u + lid] = placed;
+
+            if placed == i + 1u { fixed += 1; }
+            active_mask &= ~(1u << (placed - 1u));
+
+            let future_mask = (1u << i) - 1u;
+            let possible_future = i32(countOneBits(active_mask & future_mask));
+            if fixed + possible_future <= eff {
+                aborted = true;
+                break;
+            }
         }
 
-        var c: i32 = 0;
-        for (var q = 0u; q < 25u; q++) {
-            if lds[q * 256u + lid] == q + 1u { c += 1; }
-        }
-
-        if c > best_score {
-            best_score = c;
-            best_idx   = iter;
-            for (var q = 0u; q < 25u; q++) { best_arr[q] = lds[q * 256u + lid]; }
-            if c == 25 { break; }
+        if !aborted {
+            var c: i32 = fixed;
+            if lds[0u * 256u + lid] == 1u { c += 1; }
+            if c > best_score {
+                best_score = c;
+                best_idx = iter;
+                for (var q = 0u; q < 25u; q++) { best_arr[q] = lds[q * 256u + lid]; }
+                if c == 25 { break; }
+            }
         }
 
         iter += stride;

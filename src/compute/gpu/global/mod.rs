@@ -287,9 +287,9 @@ fn find_winner(data: &[u8], blocks: usize, lo: u64, hi: u64) -> RangeResult {
 
         let arr_start = base + 16;
         let mut arr = [0u8; N];
-        for i in 0..N {
+        for (i, j) in arr.iter_mut().enumerate().take(N) {
             let off = arr_start + i * 4;
-            arr[i] = u32::from_le_bytes(data[off..off + 4].try_into().unwrap()) as u8;
+            *j = u32::from_le_bytes(data[off..off + 4].try_into().unwrap()) as u8;
         }
 
         best_correct = score;

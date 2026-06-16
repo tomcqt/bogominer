@@ -86,7 +86,7 @@ pub fn save_new_account(req: NewAccountRequest, state: State<AppState>) -> Resul
             view.account.nickname.is_some(),
             view.account.has_recovery_code,
         );
-        return Ok(view);
+        Ok(view)
     }
 }
 
@@ -142,7 +142,7 @@ pub fn save_existing_account(
             view.account.nickname.is_some(),
             view.account.has_recovery_code
         );
-        return Ok(view);
+        Ok(view)
     }
 }
 

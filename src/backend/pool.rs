@@ -39,8 +39,12 @@ impl Pool {
         backend: Backend,
     ) {
         eprintln!(
-            "[pool] start (uuid={:?}, nick={:?}, cpu={}, backend={:?})",
-            uuid, nickname, cpu_target, backend
+            "[pool] start (uuid={}...{}, nick={:?}, cpu={}, backend={:?})",
+            &uuid[..8.min(uuid.len())],
+            &uuid[uuid.len().saturating_sub(4)..],
+            nickname,
+            cpu_target,
+            backend
         );
         self.stop();
         self.stats.reset_session();
@@ -92,7 +96,7 @@ impl Pool {
         code: &str,
         backend: Backend,
     ) {
-        let cores = num_cpus::get().max(1).min(16);
+        let cores = num_cpus::get().clamp(1, 16);
         let old_threads = self.stats.solver_threads.load(Ordering::Relaxed) as usize;
         let new_threads = ((cpu_target * cores as f64).ceil() as usize)
             .max(1)

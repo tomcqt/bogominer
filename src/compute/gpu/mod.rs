@@ -129,7 +129,7 @@ pub fn select_backend() -> Result<Box<dyn Miner>, String> {
 
 // same as select_backend but without constructing real miner, for
 // settings panel. returns core name
-pub fn probe_active_core() -> Option<String> {
+pub fn _probe_active_core() -> Option<String> {
     let (_, vendor, label) = pick_adapter(false)?;
 
     #[cfg(feature = "gpu-cuda")]
