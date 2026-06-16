@@ -143,11 +143,13 @@ async fn run_worker(
     let hello = HelloMsg::new(&uuid, &nickname, &code);
     let hello_json = serde_json::to_string(&hello).unwrap();
     eprintln!(
-        "[worker] sending hello (uuid={:?}, nick={:?})",
-        uuid, nickname
+        "[worker] sending hello (uuid={}...{}, nick={:?})",
+        &uuid[..8.min(uuid.len())],
+        &uuid[uuid.len().saturating_sub(4)..],
+        nickname
     );
     ws_tx
-        .send(Message::Text(hello_json.into()))
+        .send(Message::Text(hello_json))
         .await
         .map_err(|e| format!("ws send hello failed: {}", e))?;
 
@@ -310,7 +312,7 @@ async fn run_worker(
                             best_index,
                         );
                         let json = serde_json::to_string(&msg).unwrap();
-                        if let Err(e) = ws_tx.send(Message::Text(json.into())).await {
+                        if let Err(e) = ws_tx.send(Message::Text(json)).await {
                             return Err(format!("ws send result failed: {}", e));
                         }
                         last_reported_total = total;
@@ -329,7 +331,7 @@ async fn run_worker(
                         let _ = stop_tx.send(true);
                         let stop = StopMsg::new();
                         let json = serde_json::to_string(&stop).unwrap();
-                        let _ = ws_tx.send(Message::Text(json.into())).await;
+                        let _ = ws_tx.send(Message::Text(json)).await;
                         let _ = ws_tx.close().await;
                         eprintln!("[worker] waiting for {} solver threads to exit", solver_handles.len());
                         for h in solver_handles {

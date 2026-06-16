@@ -32,8 +32,11 @@ impl Pool {
 
     pub fn start(&mut self, uuid: &str, nickname: &str, code: &str, cpu_target: f64) {
         eprintln!(
-            "[pool] start (uuid={:?}, nick={:?}, cpu={})",
-            uuid, nickname, cpu_target
+            "[pool] start (uuid={}...{}, nick={:?}, cpu={})",
+            &uuid[..8.min(uuid.len())],
+            &uuid[uuid.len().saturating_sub(4)..],
+            nickname,
+            cpu_target
         );
         self.stop();
         self.stats.reset_session();
@@ -77,7 +80,7 @@ impl Pool {
     }
 
     pub fn set_cpu_target(&mut self, cpu_target: f64, uuid: &str, nickname: &str, code: &str) {
-        let cores = num_cpus::get().max(1).min(16);
+        let cores = num_cpus::get().clamp(1, 16);
         let old_threads = self.stats.solver_threads.load(Ordering::Relaxed) as usize;
         let new_threads = ((cpu_target * cores as f64).ceil() as usize)
             .max(1)
