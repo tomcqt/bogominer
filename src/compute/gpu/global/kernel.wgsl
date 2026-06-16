@@ -9,6 +9,7 @@ struct Params {
     base_seed_lo: u32, base_seed_hi: u32,
     lo_lo:        u32, lo_hi:        u32,
     hi_lo:        u32, hi_hi:        u32,
+    threshold:    i32,
 }
 @group(0) @binding(0) var<storage, read>       params:  Params;
 

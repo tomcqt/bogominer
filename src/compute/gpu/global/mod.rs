@@ -108,10 +108,10 @@ impl GlobalGpuMiner {
         let blocks = DEFAULT_BLOCKS;
         let n = blocks as usize;
 
-        // params: 6 x u32 = 24 bytes
+        // params: 7 x u32 = 28 bytes (6 seed/range words + threshold)
         let params_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("params"),
-            size: 24,
+            size: 28,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -155,14 +155,15 @@ impl Miner for GlobalGpuMiner {
         format!("gpu/global ({})", self.label)
     }
 
-    fn compute_range(&mut self, seed: u64, lo: u64, hi: u64, _threshold: i32) -> RangeResult {
-        let params_data: [u32; 6] = [
+    fn compute_range(&mut self, seed: u64, lo: u64, hi: u64, threshold: i32) -> RangeResult {
+        let params_data: [u32; 7] = [
             seed as u32,
             (seed >> 32) as u32,
             lo as u32,
             (lo >> 32) as u32,
             hi as u32,
             (hi >> 32) as u32,
+            threshold as u32,
         ];
         self.queue
             .write_buffer(&self.params_buf, 0, bytemuck::cast_slice(&params_data));
