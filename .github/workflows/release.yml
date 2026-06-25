@@ -36,30 +36,6 @@ jobs:
           echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
           echo "Previous tag: $PREV_TAG"
 
-      - name: Build commit changelog
-        id: changelog
-        run: |
-          CURRENT_TAG="${{ github.event.release.tag_name }}"
-          PREV_TAG="${{ steps.prev-tag.outputs.prev_tag }}"
-
-          if [ -z "$PREV_TAG" ]; then
-            RANGE="$CURRENT_TAG"
-          else
-            RANGE="${PREV_TAG}..${CURRENT_TAG}"
-          fi
-
-          # One bullet per commit: hash (short) + subject + author
-          LOG=$(git log "$RANGE" \
-                  --pretty=format:"- `%h` %s (%an)" \
-                  --no-merges)
-
-          # Store multi-line value safely
-          {
-            echo "log<<EOF"
-            echo "$LOG"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Update release name and body
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -67,7 +43,7 @@ jobs:
           VERSION="${{ steps.cargo-version.outputs.version }}"
           PREV_TAG="${{ steps.prev-tag.outputs.prev_tag }}"
           EXISTING_BODY="${{ github.event.release.body }}"
-          CHANGELOG="${{ steps.changelog.outputs.log }}"
+          CHANGELOG=""
 
           if [ -n "$PREV_TAG" ]; then
             RANGE_HEADER="Changes since \`${PREV_TAG}\`"
@@ -82,8 +58,7 @@ jobs:
             "$CHANGELOG")
 
           gh release edit "${{ github.event.release.tag_name }}" \
-            --title "bogominer v${VERSION}" \
-            --notes "$NEW_BODY"
+            --title "bogominer v${VERSION}"
 
   build:
     name: Build — ${{ matrix.target }}
